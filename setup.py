@@ -8,4 +8,7 @@ setup(name='ipca',
       author_email='',
       license='MIT',
       packages=['ipca'],
+      install_requires=[
+          'numpy',
+      ],
       zip_safe=False)

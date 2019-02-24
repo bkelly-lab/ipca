@@ -1,9 +1,9 @@
 import numpy as np
-from ipca import IPCARegressor
+from ..ipca import IPCARegressor
 import scipy.io as sio
 
 
-TestData = sio.loadmat('../AUX/IPCA_Pruitt/TestData.mat')
+TestData = sio.loadmat('../../AUX/IPCA_Pruitt/TestData.mat')
 Z = TestData['Z']
 Y = TestData['Y']
 PSF = TestData['PSF']

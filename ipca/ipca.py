@@ -4,10 +4,13 @@ import numpy as np
 class IPCARegressor:
     """
     This class implements the PPR algorithm as detailed in math.pdf.
+
     Parameters
     ----------
+
     n_factors : int, default=3:
         The number of latent factors to estimate
+
     intercept : str, default='restricted'
         Determines whether the model is estimated with a restricted intercept
         or whether instrumental variables are used in intercept expression
@@ -33,14 +36,20 @@ class IPCARegressor:
                 setattr(self, k, v)
 
     def fit(self, Z=None, Y=None, PSF=None):
-        """Fits the regressor to the data
+        """Fits the regressor to the data using an alternating least squares
+        scheme.
+
         Parameters
         ----------
-        Z: array-like of shape (n_samples,n_characts,n_time), i.e. characteristics
+
+        Z: array-like of shape (n_samples,n_characts,n_time),
+            i.e. characteristics
+
         Y: array_like of shape (n_samples,n_time), i.e dependent variables
 
         Optional parameters
         -------------------
+
         PSF: array-like of shape (n_PSF, n_time), i.e. pre-specified factors
         """
 
@@ -49,7 +58,8 @@ class IPCARegressor:
         if np.size(Y, axis=1) != np.size(Z, axis=2):
             raise ValueError('Number of samples in Z and Y must be identical.')
         if np.size(Z, axis=1) < self.n_factors:
-            raise ValueError('Number of factors exceeds number of characteristics.')
+            raise ValueError('Number of factors exceeds number' + \
+                             'of characteristics.')
         if PSF is not None:
             if np.size(PSF, 1) != np.size(Y, axis=1):
                 raise ValueError('Number of samples in PSF does not match Z or Y')
@@ -77,7 +87,7 @@ class IPCARegressor:
         for t in range(n_time):
             W[:, :, t] = np.transpose(Z[np.squeeze(nan_mask[:, t]), :, t]).dot(np.squeeze(Z[nan_mask[:, t], :, t]))/np.sum(nan_mask[:, t])
 
-        # Initialization ALS
+        # Initialize the Alternating Least Squares Procedure
         Gamma_Old, s, v = np.linalg.svd(X)
         Gamma_Old = Gamma_Old[:, :self.n_factors]
         s = s[:self.n_factors]
@@ -90,12 +100,12 @@ class IPCARegressor:
         iter = 0
 
         while((iter <= self.max_iter) and (tol_current > self.iter_tol)):
-            # Alternating least squares procedure
+
             if UsePreSpecFactors:
-                Gamma_New, Factor_New = self.ALS_fit(Gamma_Old, W, X, nan_mask, PSF=PSF)
+                Gamma_New, Factor_New = self._ALS_fit(Gamma_Old, W, X, nan_mask, PSF=PSF)
                 tol_current = np.amax(Gamma_New.reshape((-1, 1))-Gamma_Old.reshape((-1, 1)))
             else:
-                Gamma_New, Factor_New = self.ALS_fit(Gamma_Old, W, X, nan_mask)
+                Gamma_New, Factor_New = self._ALS_fit(Gamma_Old, W, X, nan_mask)
                 tol_current = np.amax(np.vstack((Gamma_New.reshape((-1, 1))-Gamma_Old.reshape((-1, 1)),Factor_New.reshape((-1,1))-Factor_Old.reshape((-1,1)))))
 
             # Compute update size
@@ -106,7 +116,14 @@ class IPCARegressor:
 
         return Gamma_New, Factor_New
 
-    def ALS_fit(self, Gamma_Old, W, X, nan_mask, **kwargs):
+    def _ALS_fit(self, Gamma_Old, W, X, nan_mask, **kwargs):
+        """The alternating least squares procedure switches back and forth
+        between evaluating the first order conditions for Gamma_Beta, and the
+        factors until convergence is reached. This function carries out one
+        complete update procedure and will need to be called repeatedly using
+        the updated Gamma's and factors as inputs.
+
+        """
 
         # Determine whether any per-specified factors were passed
         UsePreSpecFactors = False
@@ -182,10 +199,10 @@ class IPCARegressor:
         return Gamma_New, F_New
 
     def _nan_check(self, Z, Y):
-        """This function checks whether an element in the pair of Z[n,:,t] and Y[n,t]
-        is missing and returns a matrix of dimension (n_samples, n_time) containing
-        boolean values. The output is False whenever there is a missing value in the
-        pair.
+        """This function checks whether an element in the pair of
+        Z[n,:,t] and Y[n,t] is missing and returns a matrix of dimension
+        (n_samples, n_time) containing boolean values. The output is False
+        whenever there is a missing value in the pair and true otherwise
         ----------
         Parameters
         Z: array-like of shape (n_samples,n_characts,n_time)
