@@ -20,7 +20,7 @@ def test_construction_errors():
 
 
 # Create test data and run package
-P = pd.read_csv('../../../TESTDATA/IPCADATA_AsPanel.csv', delimiter=',',nrows=1000000,header=None)
+P = pd.read_csv('../../../TESTDATA/IPCADATA_AsPanel.csv', delimiter=',',header=None)
 P = P.values
 regr = IPCARegressor(n_factors=5, intercept=False)
 Gamma_New, Factor_New =regr.fit(data=P)

@@ -303,7 +303,8 @@ class IPCARegressor:
         if K > 0:
             R1 = np.linalg.cholesky(Gamma_New[:, :K].T.dot(Gamma_New[:, :K])).T
             R2, _, _ = np.linalg.svd(R1.dot(F_New).dot(F_New.T).dot(R1.T))
-            Gamma_New[:, :K] = np.linalg.lstsq(Gamma_New[:, :K].T, R1.T)[0]\
+            Gamma_New[:, :K] = np.linalg.lstsq(Gamma_New[:, :K].T,
+                                               R1.T, rcond=None)[0]\
                 .dot(R2)
             F_New = np.linalg.solve(R2, R1.dot(F_New))
 
