@@ -5,10 +5,10 @@ setup(name='ipca',
       description='Implements the IPCA method of Kelly, Pruitt, Su (2017)',
       url='https://github.com/matbuechner/ipca',
       author='Matthias Buechner',
-      author_email='',
+      author_email='matthias.buechner.16@mail.wbs.ac.uk',
       license='MIT',
       packages=['ipca'],
       install_requires=[
-          'numpy',
+          'numpy','progressbar'
       ],
       zip_safe=False)
