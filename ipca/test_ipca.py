@@ -2,16 +2,10 @@ import pytest
 import numpy as np
 import pandas as pd
 from sklearn.utils.testing import assert_raises
-from sklearn.utils import estimator_checks
-
-import h5py
-
 
 
 from ipca import IPCARegressor
-
-
-
+# Test Construction Errors
 @pytest.mark.fast_test
 def test_construction_errors():
     assert_raises(ValueError, IPCARegressor, n_factors=0)
@@ -20,9 +14,18 @@ def test_construction_errors():
 
 
 # Create test data and run package
-P = pd.read_csv('../../../TESTDATA/IPCADATA_AsPanel.csv', delimiter=',',header=None)
-P = P.values
-regr = IPCARegressor(n_factors=5, intercept=False)
-Gamma_New, Factor_New =regr.fit(data=P)
-print('Gamma', Gamma_New)
-print('Factor', Factor_New)
+from statsmodels.datasets import grunfeld
+data = grunfeld.load_pandas().data
+data.year = data.year.astype(np.int64)
+data.firm = data.firm.apply(lambda x: x.decode('utf-8'))
+# Establish unique IDs to conform with package
+N = len(np.unique(data.firm))
+ID = dict(zip(np.unique(data.firm).tolist(),np.arange(1,N+1)))
+data.firm = data.firm.apply(lambda x: ID[x])
+# Ensure that ordering of the data is correct
+data = data[['firm','year','invest','value','capital']]
+# Convert to numpy
+data = data.to_numpy()
+
+regr = IPCARegressor(n_factors=1, intercept=False)
+Gamma_New, Factor_New = regr.fit(data=data)

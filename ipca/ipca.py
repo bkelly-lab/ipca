@@ -12,9 +12,8 @@ class IPCARegressor:
     n_factors : int, default=3:
         The number of latent factors to estimate
 
-    intercept : str, default='restricted'
-        Determines whether the model is estimated with a restricted intercept
-        or whether instrumental variables are used in intercept expression
+    intercept : boolean, default=False
+        Determines whether the model is estimated with or without an intercept
 
     max_iter : int, default=10000
         Maximum number of alternating least squares updates before the
