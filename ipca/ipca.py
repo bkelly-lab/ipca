@@ -4,7 +4,7 @@ import progressbar
 
 class IPCARegressor:
     """
-    This class implements the PPR algorithm as detailed in math.pdf.
+    This class implements the IPCA algorithm by Kelly, Pruitt, Su (2017).
 
     Parameters
     ----------
