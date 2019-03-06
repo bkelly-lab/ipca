@@ -7,6 +7,7 @@ setup(name='ipca',
       author='Matthias Buechner',
       author_email='matthias.buechner.16@mail.wbs.ac.uk',
       license='MIT',
+      keywords=['ipca', 'regression', 'IV', 'instrumental variable'],
       packages=['ipca'],
       install_requires=[
           'numpy','progressbar'
