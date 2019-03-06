@@ -20,7 +20,7 @@ class IPCARegressor:
         estimation is stopped
 
     iter_tol : float, default=10e-6
-        Tolerance that determines the threshold for stopping the alternating
+        Tolerance determining the threshold for stopping the alternating
         least squares updates. If the aggregated changes in updated
         parameters drop below this threshold the procedure is stopped.
     """
