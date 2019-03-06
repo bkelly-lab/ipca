@@ -7,21 +7,32 @@ This is a Python implementation of the Instrumtented Principal Components Analys
 
 ## Usage
 
-Like [statsmodels](http://www.statsmodels.org) to include, supports
-[patsy](https://patsy.readthedocs.io/en/latest/) formulas for
-specifying models. For example, the classic Grunfeld regression can be
-specified
+Exemplary use of the ipca package. The data is the seminal Grunfeld data set as provided on [statsmodels](http://www.statsmodels.org). Note, the package
+requires the panel of input data columns to be ordered in the following way:
+
+1. entity id (numeric)
+2. time (numeric)
+3. dependent variable (numeric),
+4. and following columns contain characteristics.
 
 ```python
 import numpy as np
 from statsmodels.datasets import grunfeld
 data = grunfeld.load_pandas().data
 data.year = data.year.astype(np.int64)
-# MultiIndex, entity - time
-data = data.set_index(['firm','year'])
-from ipca import IPCARegressor
+data.firm = data.firm.apply(lambda x: x.decode('utf-8'))
+# Establish unique IDs to conform with package
+N = len(np.unique(data.firm))
+ID = dict(zip(np.unique(data.firm).tolist(),np.arange(1,N+1)))
+data.firm = data.firm.apply(lambda x: ID[x])
+# Ensure that ordering of the data is correct
+data = data[['firm','year','invest','value','capital']]
+# Convert to numpy
+data = data.to_numpy()
+
+# Call ipca
 regr = IPCARegressor(n_factors=1, intercept=False)
-Gamma_New, Factor_New = regr.fit(data=P)
+Gamma_New, Factor_New = regr.fit(data=data)
 ```
 
 ## Installing
