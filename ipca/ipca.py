@@ -145,7 +145,7 @@ class IPCARegressor:
         # Establish dimensions
         n_time = np.size(Z, axis=2)
         n_characts = np.size(Z, axis=1)
-        n_samples = np.size(Z, axis=0)
+        # n_samples = np.size(Z, axis=0)
 
         # Handle pre-specified factors
         if PSF is not None:
