@@ -15,4 +15,4 @@ script:
   - cd docs
   - make html
   - cd ..
-  - doctr deploy docs/
+  - doctr deploy . --build-tags
