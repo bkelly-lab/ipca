@@ -1,8 +1,7 @@
 # Instrumented Principal Components Analysis
-This is a Python implementation of the Instrumtented Principal Components Analysis framework by Kelly, Pruitt, Su (2017). All remaining errors are my own.
-
-
-
+This is a Python implementation of the Instrumtented Principal Components Analysis framework by Kelly, Pruitt, Su (2017). The package is still in the development
+phase, hence please report issues and components that will help in improving the
+package. All remaining errors are my own.
 
 
 ## Usage
