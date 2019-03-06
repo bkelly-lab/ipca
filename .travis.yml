@@ -4,4 +4,15 @@ python:
   - "3.6"
 install:
   - pip install -r requirements.txt
-script: pytest
+  env:
+      global:
+        # Doctr deploy key for bkelly-lab/ipca
+        - secure: "dggVBPoscYf2xjHSP4vChOdE4UkhSv704xLjUYvHj6f4DZ6MIQGbx+JM2IvjPNYpE/BomaiuYAim00oY5KFaQ38Cqc+AdKSHqDiNaUYv7d1Dj1N/NUg7dQcqz0zOswL/uFtiCYu5Qm5f6RoLwqvvycO9ZBkgpfAD3kRvFKl+pIDHkZ5976wFRa7zIZql5COyZXFBDNei2hui0iju3DuYKI3t9IXPzBEypSpWX3uaGkH9vwni1Zr90Zd+OfzNGOrGbqWuKRv0y9MBz9wa3qOCchMO1AAKa9/2EHHkPp7yub0cgs4gv2dkMa5dGbZJzcy8CFTfiqW85Uyz7j+z2L8xtwJPk4xmCDFF68Uzazak9WZLcaeoVIvDKYX5G4jWeRzRT1LSOoIoYwvsvl9/1WJyR3sx/a3P5L9Ow8uicYPH5AXbnd88/77inhVBc+fAMxYHlkLugyF4MNaV7FAPIB/N8lhl12JA14YpYlFcKiG3GtRe1ZNVZZ/WECz6jypXoKQF31cwaLFaKB8GFGr8gro8b4zSOlBGdMsbyAU8S8fjyzbzwVfM4a91JDL0u22F4rUg4vECPnYi8EKuAfllrOlFy6UoDZ0QeSKcTpi6ycOniuwtbgP6QfRBk4Fi5BVKd6Rgpe35jMDxbxGSPc34o5+gpO8524N9Ymbr3Yv03wt26zM="
+script:
+  - pytest
+  - set -e
+  - pip install doctr
+  - cd docs
+  - make html
+  - cd ..
+  - doctr deploy . --built-docs path/to/built/html/
