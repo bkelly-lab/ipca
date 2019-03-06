@@ -67,7 +67,7 @@ is possible that older versions work.
 ### Testing
 
 * pandas (0.24+)
-* sklearn (0.20+)
+* scikit-learn (0.20+)
 * pytest (4.3+)
 * statsmodels (0.9+)
 

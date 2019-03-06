@@ -3,4 +3,4 @@ pandas>= 0.24
 scipy>=1.1
 statsmodels>=0.9
 progressbar >=2.5
-sklearn >= 0.20
+scikit-learn >= 0.20
