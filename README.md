@@ -75,6 +75,8 @@ is possible that older versions work.
 * scikit-learn (0.20+)
 * pytest (4.3+)
 * statsmodels (0.9+)
+## Acknowledgements
+The implementation is inspired by the MATLAB code for IPCA made available at on [Seth Pruitt's](https://sethpruitt.net/research/) website. 
 
 ## References
 
