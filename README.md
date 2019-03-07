@@ -30,6 +30,7 @@ data = data[['firm','year','invest','value','capital']]
 data = data.to_numpy()
 
 # Call ipca
+from ipca import IPCARegressor
 regr = IPCARegressor(n_factors=1, intercept=False)
 Gamma_New, Factor_New = regr.fit(data=data)
 ```
