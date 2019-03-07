@@ -76,7 +76,7 @@ is possible that older versions work.
 * pytest (4.3+)
 * statsmodels (0.9+)
 ## Acknowledgements
-The implementation is inspired by the MATLAB code for IPCA made available at on [Seth Pruitt's](https://sethpruitt.net/research/) website. 
+The implementation is inspired by the MATLAB code for IPCA made available on [Seth Pruitt's](https://sethpruitt.net/research/) website. 
 
 ## References
 
