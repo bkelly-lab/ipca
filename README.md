@@ -52,6 +52,9 @@ cd ipca
 python setup.py install
 ```
 
+## Documenation
+The lastest documenation is published [HERE](https://bkelly-lab.github.io/ipca/).
+
 ## Requirements
 
 ### Running
