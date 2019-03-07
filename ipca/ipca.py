@@ -9,7 +9,7 @@ class IPCARegressor:
     Parameters
     ----------
 
-    n_factors : int, default=3:
+    n_factors : int, default=1
         The number of latent factors to estimate
 
     intercept : boolean, default=False
@@ -20,9 +20,7 @@ class IPCARegressor:
         estimation is stopped
 
     iter_tol : float, default=10e-6
-        Tolerance determining the threshold for stopping the alternating
-        least squares updates. If the aggregated changes in updated
-        parameters drop below this threshold the procedure is stopped.
+        Tolerance threshold for stopping the alternating least squares procedure
     """
 
     def __init__(self, n_factors=1, intercept=False, max_iter=10000,
@@ -44,6 +42,7 @@ class IPCARegressor:
             if k != 'self':
                 setattr(self, k, v)
 
+
     def fit(self, data=None, PSF=None):
         """
         Fits the regressor to the data using an alternating least squares
@@ -51,37 +50,43 @@ class IPCARegressor:
 
         Parameters
         ----------
-
-        data : array-like, panel of stacked data. Each row corresponds to an
-            observation (i, t) where i denotes the entity index and t denotes
+        data :  numpy array
+            Panel of stacked data. Each row corresponds to an observation
+            (i, t) where i denotes the entity index and t denotes
             the time index. The panel may be unbalanced. The number of unique
             entities is n_samples, the number of unique dates is n_time, and
             the number of characteristics used as instruments is n_characts.
             The columns of the panel are organized in the following order:
-                COLUMN 1: entity id (i)
-                COLUMN 2: time index (t)
-                COLUMN 3: dependent variable corresponding to observation (i,t)
-                COLUMN 4 to COLUMN 4+n_characts: characteristics.
-            The panel is rearranged into a tensor of dimensions
-                (n_samples, n_characts, n_time)
 
-        PSF : optional, array-like of shape (n_PSF, n_time),
-            i.e. pre-specified factors
+            - Column 1: entity id (i)
+            - Column 2: time index (t)
+            - Column 3: dependent variable corresponding to observation (i,t)
+            - Column 4 to column 4+n_characts: characteristics.
+
+            The panel is rearranged into a tensor of dimension
+            (n_samples, n_characts, n_time)
+
+        PSF : numpy array, optional
+            Set of pre-specified factors as matrix of dimension (n_PSF, n_time)
 
         Returns
         -------
 
-        Gamma : array-like with dimensions (n_characts, n_factors). If there
+        Gamma : numpy array
+            Array with dimensions (n_characts, n_factors) containing the
+            mapping between characteristics and factors loadings. If there
             are n_prespec many pre-specified factors in the model then the
             matrix returned is of dimension (n_characts, (n_factors+n_PSF)).
             If an intercept is included in the model, its loadings are returned
             in the last column of Gamma.
 
-        Factors : array_like with dimensions (n_factors, n_time). If
-            pre-specified factors were passed the returned matrix is
-            of dimension ((n_factors - n_PSF), n_time), corresponding to the
-            n_factors - n_PSF many factors estimated on top of the pre-
-            specified ones.
+        Factors : numpy array
+            Array with dimensions (n_factors, n_time) containing the estimated
+            factors. If pre-specified factors were passed the returned
+            array is of dimension ((n_factors - n_PSF), n_time),
+            corresponding to the n_factors - n_PSF many factors estimated on
+            top of the pre-specified ones.
+
         """
 
         if data is None:
@@ -104,7 +109,6 @@ class IPCARegressor:
 
         Parameters
         ----------
-
         Z : array-like of shape (n_samples,n_characts,n_time),
             i.e. characteristics
 
@@ -113,9 +117,9 @@ class IPCARegressor:
         PSF : optional, array-like of shape (n_PSF, n_time), i.e.
             pre-specified factors
 
+
         Returns
         -------
-
         Gamma : array-like with dimensions (n_characts, n_factors). If there
             are n_prespec many pre-specified factors in the model then the
             matrix returned is of dimension (n_characts, (n_factors+n_PSF)).

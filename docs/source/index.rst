@@ -3,14 +3,22 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to ipca's documentation!
+IPCA Package Documentation
 ================================
+This package provides a Python (3.5+) implementation of the Instrumented
+Principal Components Analysis framework by Kelly, Pruitt, Su (2017)
+[1_, 2_].
+
+.. _1: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2983919
+.. _2: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3032013
+
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+  :maxdepth: 0
+  :caption: Contents:
+  :glob:
 
-
+  ipca
 
 Indices and tables
 ==================
