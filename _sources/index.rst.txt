@@ -18,7 +18,14 @@ Principal Components Analysis framework by Kelly, Pruitt, Su (2017)
   :caption: Contents:
   :glob:
 
-  ipca
+.. module:: ipca
+  :synopsis: Documenation of the IPCA regressor
+
+.. autoclass:: IPCARegressor
+  :members:
+  :undoc-members:
+  :show-inheritance:
+
 
 Indices and tables
 ==================
