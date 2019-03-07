@@ -1,9 +1,7 @@
 # Instrumented Principal Components Analysis
 [![Build Status](https://travis-ci.org/bkelly-lab/ipca.svg?branch=master)](https://travis-ci.org/bkelly-lab/ipca)
 
-This is a Python implementation of the Instrumtented Principal Components Analysis framework by Kelly, Pruitt, Su (2017). The package is still in the development
-phase, hence please report issues and comments that will help in improving the
-package. All remaining errors are my own.
+This is a Python implementation of the Instrumtented Principal Components Analysis framework by Kelly, Pruitt, Su (2017). 
 
 
 ## Usage
@@ -81,3 +79,11 @@ The implementation is inspired by the MATLAB code for IPCA made available on [Se
 ## References
 
 1. Kelly, Pruitt, Su (2017). "Instrumented Principal Components Analysis" [SSRN](https://ssrn.com/abstract=2983919)
+
+-----
+
+The package is still in the development phase, hence please share your comments and suggestions with me.
+
+Contributions welcome!
+
+\- **Matthias Buechner**
