@@ -153,7 +153,79 @@ Principal Components Analysis framework by Kelly, Pruitt, Su (2017)
 [<a class="reference external" href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2983919">1</a>, <a class="reference external" href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3032013">2</a>].</p>
 <div class="toctree-wrapper compound">
 </div>
-<span class="target" id="module-ipca"></span></div>
+<span class="target" id="module-ipca"></span><dl class="class">
+<dt id="ipca.IPCARegressor">
+<em class="property">class </em><code class="descclassname">ipca.</code><code class="descname">IPCARegressor</code><span class="sig-paren">(</span><em>n_factors=1</em>, <em>intercept=False</em>, <em>max_iter=10000</em>, <em>iter_tol=1e-05</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>This class implements the IPCA algorithm by Kelly, Pruitt, Su (2017).</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>n_factors</strong> (<em>int, default=1</em>) – The number of latent factors to estimate</li>
+<li><strong>intercept</strong> (<em>boolean, default=False</em>) – Determines whether the model is estimated with or without an intercept</li>
+<li><strong>max_iter</strong> (<em>int, default=10000</em>) – Maximum number of alternating least squares updates before the
+estimation is stopped</li>
+<li><strong>iter_tol</strong> (<em>float, default=10e-6</em>) – Tolerance threshold for stopping the alternating least squares procedure</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="ipca.IPCARegressor.fit">
+<code class="descname">fit</code><span class="sig-paren">(</span><em>data=None</em>, <em>PSF=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.fit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.fit" title="Permalink to this definition">¶</a></dt>
+<dd><p>Fits the regressor to the data using an alternating least squares
+scheme.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first">
+<li><p class="first"><strong>data</strong> (<em>numpy array</em>) – Panel of stacked data. Each row corresponds to an observation
+(i, t) where i denotes the entity index and t denotes
+the time index. The panel may be unbalanced. The number of unique
+entities is n_samples, the number of unique dates is n_time, and
+the number of characteristics used as instruments is n_characts.
+The columns of the panel are organized in the following order:</p>
+<ul class="simple">
+<li>Column 1: entity id (i)</li>
+<li>Column 2: time index (t)</li>
+<li>Column 3: dependent variable corresponding to observation (i,t)</li>
+<li>Column 4 to column 4+n_characts: characteristics.</li>
+</ul>
+<p>The panel is rearranged into a tensor of dimension
+(n_samples, n_characts, n_time)</p>
+</li>
+<li><p class="first"><strong>PSF</strong> (<em>numpy array, optional</em>) – Set of pre-specified factors as matrix of dimension (n_PSF, n_time)</p>
+</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last"><ul class="simple">
+<li><strong>Gamma</strong> (<em>numpy array</em>) – Array with dimensions (n_characts, n_factors) containing the
+mapping between characteristics and factors loadings. If there
+are n_prespec many pre-specified factors in the model then the
+matrix returned is of dimension (n_characts, (n_factors+n_PSF)).
+If an intercept is included in the model, its loadings are returned
+in the last column of Gamma.</li>
+<li><strong>Factors</strong> (<em>numpy array</em>) – Array with dimensions (n_factors, n_time) containing the estimated
+factors. If pre-specified factors were passed the returned
+array is of dimension ((n_factors - n_PSF), n_time),
+corresponding to the n_factors - n_PSF many factors estimated on
+top of the pre-specified ones.</li>
+</ul>
+</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</dd></dl>
+
+</div>
 <div class="section" id="indices-and-tables">
 <h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h1>
 <ul class="simple">
