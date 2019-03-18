@@ -215,7 +215,7 @@ class IPCARegressor:
 
         Returns
         -------
-        
+
         Ypred : numpy array
             The length of the returned array matches the
             the length of data. A nan will be returned if there is missing
@@ -549,7 +549,7 @@ class IPCARegressor:
             temp_n[:, 1] = dates
             temp_n = temp_n[np.invert(ixd), :]
             temp = np.append(temp, temp_n, axis=0)
-            bar.update(n)
+            bar.update(n_i)
         bar.finish()
         temp = temp[1:, :]  # get rid of row used for initialization
 
