@@ -37,10 +37,22 @@ print('R2pred',regr.r2_pred)
 # Use the fitted regressor to predict
 data_x = np.delete(data,2,axis=1)
 Ypred = regr.predict(data=data_x)
-
 # Test refitting the IPCARegressor
 data_refit = data[data[:,1]!=1954,:]
 Gamma_New, Factor_New = regr.fit(data=data_refit)
+
+# Test nan observations
+regr = IPCARegressor(n_factors=1, intercept=True)
+data_nan = data.copy()
+data_nan[10:30, 2:] = np.nan
+Gamma_New, Factor_New = regr.fit(data=data_nan)
+
+
+# Test missing observations
+regr = IPCARegressor(n_factors=1, intercept=True)
+data_missing = data.copy()
+data_missing  = data_missing[:-10,:]
+Gamma_New, Factor_New = regr.fit(data=data_missing)
 
 # Simulate OOS experiment
 # In-sample data excludes observations during last available date
@@ -51,3 +63,4 @@ data_OOS = data[data[:,1]==1954,:]
 regr.fit(data=data_IS)
 
 Ypred = regr.predictOOS(data=data_OOS, mean_factor=True)
+raise ValueError

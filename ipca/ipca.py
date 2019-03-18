@@ -176,7 +176,7 @@ class IPCARegressor:
 
         for i in range(n_obs):
             if np.any(np.isnan(data[i,:])):
-                Ypred[i, 0] = np.nan
+                Ypred[i] = np.nan
             else:
                 if mean_factor:
                     Ypred[i] = data[i, 2:].dot(self.Gamma_Est)\
@@ -240,7 +240,7 @@ class IPCARegressor:
         Factor_OOS = np.linalg.solve(Denom, Numer.reshape((-1, 1)))
         for i in range(n_obs):
             if np.any(np.isnan(data[i,:])):
-                Ypred[i, 0] = np.nan
+                Ypred[i] = np.nan
             else:
                 if mean_factor:
                     Ypred[i] = Z[i,:].dot(self.Gamma_Est)\
@@ -532,29 +532,29 @@ class IPCARegressor:
         print('The panel dimensions are:')
         print('n_samples:', N, ', n_characts:', L, ', n_time:', T)
 
-        # Construct Z, Y
-        Z = np.full((N, L, T), np.nan)
-        Y = np.full((N, T), np.nan)
 
         bar = progressbar.ProgressBar(maxval=N,
                                       widgets=[progressbar.Bar('=', '[', ']'),
                                                ' ', progressbar.Percentage()])
         print("Unpacking Panel...")
         bar.start()
-        temp = np.full((1, L+3), np.nan)
+        temp = []
         for n_i, n in enumerate(ids):
             ixd = np.isin(dates, P[P[:, 0] == n, 1])
             temp_n = np.full((T, L+3), np.nan)
             temp_n[:, 0] = n
             temp_n[:, 1] = dates
             temp_n = temp_n[np.invert(ixd), :]
-            temp = np.append(temp, temp_n, axis=0)
+            if np.size(temp_n, axis=0) == 0:
+                continue
+            temp.append(temp_n)
             bar.update(n_i)
         bar.finish()
-        temp = temp[1:, :]  # get rid of row used for initialization
 
         # Append the missing observations to create balanced panel
-        P = np.append(P, temp, axis=0)
+        if len(temp) > 0:
+            temp = np.concatenate(temp, axis=0)
+            P = np.append(P, temp, axis=0)
         # Sort observations such that T observations for each n in N are
         # stacked vertically
         ind = np.lexsort((P[:, 1], P[:, 0]))
