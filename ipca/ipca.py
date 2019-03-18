@@ -1,5 +1,6 @@
 import numpy as np
 import progressbar
+import warnings
 
 
 class IPCARegressor:
@@ -10,7 +11,11 @@ class IPCARegressor:
     ----------
 
     n_factors : int, default=1
-        The number of latent factors to estimate
+        The number of latent factors to estimate. Note, the number of
+        estimated factors is automatically reduced by the number of
+        pre-specified factors. For example, if n_factors = 2 and one
+        pre-specified factor is passed, then IPCARegressor will estimate
+        one factor estimated in addition to the pre-specified factor.
 
     intercept : boolean, default=False
         Determines whether the model is estimated with or without an intercept
@@ -42,7 +47,6 @@ class IPCARegressor:
             if k != 'self':
                 setattr(self, k, v)
 
-
     def fit(self, data=None, PSF=None):
         """
         Fits the regressor to the data using an alternating least squares
@@ -63,9 +67,6 @@ class IPCARegressor:
             - Column 3: dependent variable corresponding to observation (i,t)
             - Column 4 to column 4+n_characts: characteristics.
 
-            The panel is rearranged into a tensor of dimension
-            (n_samples, n_characts, n_time)
-
         PSF : numpy array, optional
             Set of pre-specified factors as matrix of dimension (n_PSF, n_time)
 
@@ -75,7 +76,7 @@ class IPCARegressor:
         Gamma : numpy array
             Array with dimensions (n_characts, n_factors) containing the
             mapping between characteristics and factors loadings. If there
-            are n_prespec many pre-specified factors in the model then the
+            are n_PSF many pre-specified factors in the model then the
             matrix returned is of dimension (n_characts, (n_factors+n_PSF)).
             If an intercept is included in the model, its loadings are returned
             in the last column of Gamma.
@@ -92,15 +93,158 @@ class IPCARegressor:
         if data is None:
             raise ValueError('Must pass panel data.')
 
+        # Handle pre-specified factors
+        if PSF is not None:
+            self.UsePreSpecFactors = True
+        else:
+            self.UsePreSpecFactors = False
+
         # Unpack the Panel
-        Z, Y = self._unpack_panel(data)
+        Z, Y = self._unpack_panel_XY(data)
+
+        if self.UsePreSpecFactors:
+            if np.size(PSF, axis=0) == self.n_factors:
+                warnings.warn("The number of factors (n_factors) to be "
+                              "estimated matches, the number of "
+                              "pre-specified factors. No additional factors "
+                              "will be estimated. To estimate additional "
+                              "factors increase n_factors.")
 
         # Run IPCA
         Gamma, Factors = self._fit_ipca(Z=Z, Y=Y, PSF=PSF)
+
+        # Store estimates
         self.Gamma_Est = Gamma
         self.Factors_Est = Factors
 
+        if self.UsePreSpecFactors:
+            if self.intercept and PSF is not None:
+                PSF = np.concatenate((PSF, np.ones((1, len(self.dates)))), axis=0)
+            else:
+                PSF = np.ones((1, len(self.dates)))
+        if self.UsePreSpecFactors:
+            self.Factors_Est = np.concatenate((Factors, PSF), axis=0)
+
+        # Compute goodness of fit measures
+        data_x = np.delete(data, 2, axis=1)
+        Ypred = self.predict(data_x, mean_factor=False)
+        Ytrue = data[:, 2]
+        self.r2_total = 1-np.nansum((Ypred-Ytrue)**2)/np.nansum(Ytrue**2)
+        Ypred = self.predict(data_x, mean_factor=True)
+        self.r2_pred = 1-np.nansum((Ypred-Ytrue)**2)/np.nansum(Ytrue**2)
+
         return Gamma, Factors
+
+    def predict(self, data=None, mean_factor=False):
+        """
+        Predicts fitted values for a previously fitted regressor
+
+        Parameters
+        ----------
+        data :  numpy array
+            Panel of stacked data. Each row corresponds to an observation
+            (i, t) where i denotes the entity index and t denotes
+            the time index. The panel may be unbalanced. If an observation
+            contains missing data NaN will be returned. Note that the
+            number of passed characteristics n_characts must match the
+            number of characteristics used when fitting the regressor.
+            The columns of the panel are organized in the following order:
+
+            - Column 1: entity id (i)
+            - Column 2: time index (t)
+            - Column 3 to column 3+n_characts: characteristics.
+
+        mean_factor: boolean
+            If true, the estimated factors are averaged in the time-series
+            before prediction.
+
+
+        Returns
+        -------
+        Ypred : array-like. The length of the returned array matches the
+            the length of data. A nan will be returned if there is missing
+            characteristics information.
+        """
+
+        if data is None:
+            raise ValueError('A panel of characteristics data must be provided.')
+
+        n_obs = np.size(data, axis=0)
+        Ypred = np.full((n_obs), np.nan)
+
+        for i in range(n_obs):
+            if np.any(np.isnan(data[i,:])):
+                Ypred[i, 0] = np.nan
+            else:
+                if mean_factor:
+                    Ypred[i] = data[i, 2:].dot(self.Gamma_Est)\
+                        .dot(np.mean(self.Factors_Est, axis=1))
+                else:
+                    Ypred[i] = data[i, 2:].dot(self.Gamma_Est)\
+                        .dot(self.Factors_Est[:, self.dates == data[i, 1]])
+        return Ypred
+
+    def predictOOS(self, data=None, mean_factor=False):
+        """
+        Predicts time t+1 observation using an out-of-sample design.
+
+        Parameters
+        ----------
+        data :  numpy array
+            Panel of stacked data. Each row corresponds to an observation
+            (i,t) where i denotes the entity index and t denotes
+            the time index. All data must correspond to time t, i.e. all
+            observations occur on the same date.
+            If an observation contains missing data NaN will be returned.
+            Note that the number of characteristics (n_characts) passed,
+            has to match the number of characteristics used when fitting
+            the regressor.
+            The columns of the panel are organized in the following order:
+
+            - Column 1: entity id (i)
+            - Column 2: time index (t)
+            - Column 3: dependent variable corresponding to observation (i,t)
+            - Column 4 to column 4+n_characts: characteristics.
+
+        mean_factor: boolean
+            If true, the estimated factors are averaged in the time-series
+            before prediction.
+
+
+        Returns
+        -------
+        Ypred : array-like. The length of the returned array matches the
+            the length of data. A nan will be returned if there is missing
+            characteristics information.
+        """
+
+        if data is None:
+            raise ValueError('A panel of characteristics data must be provided.')
+
+        if len(np.unique(data[:,1])) > 1:
+            raise ValueError('The panel must only have a single timestamp.')
+
+        n_obs = np.size(data, axis=0)
+        Ypred = np.full((n_obs), np.nan)
+
+        Z = data[:, 3:]
+        Y = data[:, 2]
+
+        # Compute realized factor returns
+        Numer = self.Gamma_Est.T.dot(Z.T).dot(Y)
+        Denom = self.Gamma_Est.T.dot(Z.T).dot(Z).dot(self.Gamma_Est)
+        Factor_OOS = np.linalg.solve(Denom, Numer.reshape((-1, 1)))
+        for i in range(n_obs):
+            if np.any(np.isnan(data[i,:])):
+                Ypred[i, 0] = np.nan
+            else:
+                if mean_factor:
+                    Ypred[i] = Z[i,:].dot(self.Gamma_Est)\
+                        .dot(np.mean(self.Factors_Est, axis=1))
+                else:
+                    Ypred[i] = Z[i,:].dot(self.Gamma_Est)\
+                        .dot(Factor_OOS)
+        return Ypred
 
     def _fit_ipca(self, Z=None, Y=None, PSF=None):
         """
@@ -151,20 +295,16 @@ class IPCARegressor:
         n_characts = np.size(Z, axis=1)
         # n_samples = np.size(Z, axis=0)
 
-        # Handle pre-specified factors
-        if PSF is not None:
-            UsePreSpecFactors = True
-        else:
-            UsePreSpecFactors = False
-
         # Handle intercept, effectively treating it as a prespecified factor
         if self.intercept:
-            self.n_factors = self.n_factors + 1
+            n_factors = self.n_factors + 1
             if PSF is not None:
                 PSF = np.concatenate((PSF, np.ones((1, n_time))), axis=0)
             elif PSF is None:
-                UsePreSpecFactors = True
+                self.UsePreSpecFactors = True
                 PSF = np.ones((1, n_time))
+        else:
+            n_factors = self.n_factors
 
         # Check whether elements are missing
         nan_mask = self._nan_check(Z, Y)
@@ -183,10 +323,10 @@ class IPCARegressor:
 
         # Initialize the Alternating Least Squares Procedure
         Gamma_Old, s, v = np.linalg.svd(X)
-        Gamma_Old = Gamma_Old[:, :self.n_factors]
-        s = s[:self.n_factors]
+        Gamma_Old = Gamma_Old[:, :n_factors]
+        s = s[:n_factors]
         v = v.T
-        v = v[:, :self.n_factors]
+        v = v[:, :n_factors]
         Factor_Old = np.diag(s).dot(v.T)
 
         # Estimation Step
@@ -194,7 +334,7 @@ class IPCARegressor:
         iter = 0
         while((iter <= self.max_iter) and (tol_current > self.iter_tol)):
 
-            if UsePreSpecFactors:
+            if self.UsePreSpecFactors:
                 Gamma_New, Factor_New = self._ALS_fit(Gamma_Old, W, X,
                                                       nan_mask, PSF=PSF)
                 tol_current = np.amax(Gamma_New.reshape((-1, 1))
@@ -211,8 +351,8 @@ class IPCARegressor:
             Factor_Old = Factor_New
             Gamma_Old = Gamma_New
             iter += 1
-            print(tol_current)
-
+            print('Step', iter, '- Aggregate Update:', tol_current)
+        print('-- Convergence Reached --')
         return Gamma_New, Factor_New
 
     def _ALS_fit(self, Gamma_Old, W, X, nan_mask, **kwargs):
@@ -224,15 +364,15 @@ class IPCARegressor:
         """
 
         # Determine whether any per-specified factors were passed
-        UsePreSpecFactors = False
-        if 'PSF' in kwargs:
+
+        if self.UsePreSpecFactors:
             PSF = kwargs.get("PSF")
             K_PSF, T_PSF = np.shape(PSF)
-            UsePreSpecFactors = True
+
 
         # Determine number of factors to be estimated
         T = np.size(nan_mask, axis=1)
-        if UsePreSpecFactors:
+        if self.UsePreSpecFactors:
             L, Ktilde = np.shape(Gamma_Old)
             K = Ktilde - K_PSF
 
@@ -243,7 +383,7 @@ class IPCARegressor:
         # ALS Step 1
         F_New = np.nan
         if K > 0:
-            if UsePreSpecFactors:
+            if self.UsePreSpecFactors:
                 F_New = np.full((K, T), np.nan)
                 for t in range(T):
                     m1 = Gamma_Old[:, :K].T.dot(W[:, :, t])\
@@ -267,7 +407,7 @@ class IPCARegressor:
         Numer = np.full((L*Ktilde, 1), 0)
         Denom = np.full((L*Ktilde, L*Ktilde), 0)
 
-        if UsePreSpecFactors:
+        if self.UsePreSpecFactors:
             if K > 0:
                 for t in range(T):
                     Numer = Numer + np.kron(X[:, t].reshape((-1, 1)),
@@ -356,7 +496,7 @@ class IPCARegressor:
 
         return np.array(nan_mask, dtype=bool)
 
-    def _unpack_panel(self, P):
+    def _unpack_panel_XY(self, P):
         """ Converts a stacked panel of data where each row corresponds to an
         observation (i, t) into a tensor of dimensions (N, L, T) where N is the
         number of unique entities, L is the number of characteristics and T is
@@ -419,4 +559,8 @@ class IPCARegressor:
         Z = np.dstack(np.split(P[:, 3:], N, axis=0))
         Z = np.swapaxes(Z, 0, 2)
         Y = np.reshape(P[:, 2], (N, T))
+
+        self.ids = ids
+        self.dates = dates
+
         return Z, Y

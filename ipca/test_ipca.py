@@ -25,6 +25,30 @@ data.firm = data.firm.apply(lambda x: ID[x])
 data = data[['firm','year','invest','value','capital']]
 # Convert to numpy
 data = data.to_numpy()
+PSF = np.random.randn(len(np.unique(data[:, 1])),1)
+PSF = PSF.reshape((1,-1))
 
-regr = IPCARegressor(n_factors=1, intercept=False)
+# Fit IPCARegressor
+regr = IPCARegressor(n_factors=1, intercept=True)
 Gamma_New, Factor_New = regr.fit(data=data)
+# Obtain Goodness of fit
+print('R2total',regr.r2_total)
+print('R2pred',regr.r2_pred)
+# Use the fitted regressor to predict
+data_x = np.delete(data,2,axis=1)
+Ypred = regr.predict(data=data_x)
+
+# Test refitting the IPCARegressor
+data_refit = data[data[:,1]!=1954,:]
+Gamma_New, Factor_New = regr.fit(data=data_refit)
+
+# Simulate OOS experiment
+# In-sample data excludes observations during last available date
+data_IS = data[data[:,1]!=1954,:]
+# Out-of-sample consists only of observation at last available date
+data_OOS = data[data[:,1]==1954,:]
+# Re-fit the regressor
+regr.fit(data=data_IS)
+
+Ypred = regr.predictOOS(data=data_OOS, mean_factor=True)
+raise ValueError
