@@ -143,6 +143,7 @@
   <h1>Source code for ipca.ipca</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">progressbar</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 
 
 <div class="viewcode-block" id="IPCARegressor"><a class="viewcode-back" href="../../index.html#ipca.IPCARegressor">[docs]</a><span class="k">class</span> <span class="nc">IPCARegressor</span><span class="p">:</span>
@@ -153,7 +154,11 @@
 <span class="sd">    ----------</span>
 
 <span class="sd">    n_factors : int, default=1</span>
-<span class="sd">        The number of latent factors to estimate</span>
+<span class="sd">        The number of latent factors to estimate. Note, the number of</span>
+<span class="sd">        estimated factors is automatically reduced by the number of</span>
+<span class="sd">        pre-specified factors. For example, if n_factors = 2 and one</span>
+<span class="sd">        pre-specified factor is passed, then IPCARegressor will estimate</span>
+<span class="sd">        one factor estimated in addition to the pre-specified factor.</span>
 
 <span class="sd">    intercept : boolean, default=False</span>
 <span class="sd">        Determines whether the model is estimated with or without an intercept</span>
@@ -185,7 +190,6 @@
             <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="s1">&#39;self&#39;</span><span class="p">:</span>
                 <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span>
 
-
 <div class="viewcode-block" id="IPCARegressor.fit"><a class="viewcode-back" href="../../index.html#ipca.IPCARegressor.fit">[docs]</a>    <span class="k">def</span> <span class="nf">fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">PSF</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Fits the regressor to the data using an alternating least squares</span>
@@ -206,9 +210,6 @@
 <span class="sd">            - Column 3: dependent variable corresponding to observation (i,t)</span>
 <span class="sd">            - Column 4 to column 4+n_characts: characteristics.</span>
 
-<span class="sd">            The panel is rearranged into a tensor of dimension</span>
-<span class="sd">            (n_samples, n_characts, n_time)</span>
-
 <span class="sd">        PSF : numpy array, optional</span>
 <span class="sd">            Set of pre-specified factors as matrix of dimension (n_PSF, n_time)</span>
 
@@ -218,7 +219,7 @@
 <span class="sd">        Gamma : numpy array</span>
 <span class="sd">            Array with dimensions (n_characts, n_factors) containing the</span>
 <span class="sd">            mapping between characteristics and factors loadings. If there</span>
-<span class="sd">            are n_prespec many pre-specified factors in the model then the</span>
+<span class="sd">            are n_PSF many pre-specified factors in the model then the</span>
 <span class="sd">            matrix returned is of dimension (n_characts, (n_factors+n_PSF)).</span>
 <span class="sd">            If an intercept is included in the model, its loadings are returned</span>
 <span class="sd">            in the last column of Gamma.</span>
@@ -235,15 +236,158 @@
         <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Must pass panel data.&#39;</span><span class="p">)</span>
 
+        <span class="c1"># Handle pre-specified factors</span>
+        <span class="k">if</span> <span class="n">PSF</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">UsePreSpecFactors</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">UsePreSpecFactors</span> <span class="o">=</span> <span class="kc">False</span>
+
         <span class="c1"># Unpack the Panel</span>
-        <span class="n">Z</span><span class="p">,</span> <span class="n">Y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unpack_panel</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">Z</span><span class="p">,</span> <span class="n">Y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unpack_panel_XY</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">UsePreSpecFactors</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="n">PSF</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_factors</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;The number of factors (n_factors) to be &quot;</span>
+                              <span class="s2">&quot;estimated matches, the number of &quot;</span>
+                              <span class="s2">&quot;pre-specified factors. No additional factors &quot;</span>
+                              <span class="s2">&quot;will be estimated. To estimate additional &quot;</span>
+                              <span class="s2">&quot;factors increase n_factors.&quot;</span><span class="p">)</span>
 
         <span class="c1"># Run IPCA</span>
         <span class="n">Gamma</span><span class="p">,</span> <span class="n">Factors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fit_ipca</span><span class="p">(</span><span class="n">Z</span><span class="o">=</span><span class="n">Z</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span> <span class="n">PSF</span><span class="o">=</span><span class="n">PSF</span><span class="p">)</span>
+
+        <span class="c1"># Store estimates</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span> <span class="o">=</span> <span class="n">Gamma</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">Factors_Est</span> <span class="o">=</span> <span class="n">Factors</span>
 
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">UsePreSpecFactors</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">intercept</span> <span class="ow">and</span> <span class="n">PSF</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">PSF</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">PSF</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dates</span><span class="p">)))),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">PSF</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dates</span><span class="p">)))</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">UsePreSpecFactors</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">Factors_Est</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">Factors</span><span class="p">,</span> <span class="n">PSF</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="c1"># Compute goodness of fit measures</span>
+        <span class="n">data_x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">Ypred</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">data_x</span><span class="p">,</span> <span class="n">mean_factor</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">Ytrue</span> <span class="o">=</span> <span class="n">data</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">r2_total</span> <span class="o">=</span> <span class="mi">1</span><span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">nansum</span><span class="p">((</span><span class="n">Ypred</span><span class="o">-</span><span class="n">Ytrue</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">nansum</span><span class="p">(</span><span class="n">Ytrue</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">Ypred</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">data_x</span><span class="p">,</span> <span class="n">mean_factor</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">r2_pred</span> <span class="o">=</span> <span class="mi">1</span><span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">nansum</span><span class="p">((</span><span class="n">Ypred</span><span class="o">-</span><span class="n">Ytrue</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">nansum</span><span class="p">(</span><span class="n">Ytrue</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+
         <span class="k">return</span> <span class="n">Gamma</span><span class="p">,</span> <span class="n">Factors</span></div>
+
+<div class="viewcode-block" id="IPCARegressor.predict"><a class="viewcode-back" href="../../index.html#ipca.IPCARegressor.predict">[docs]</a>    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">mean_factor</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Predicts fitted values for a previously fitted regressor</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data :  numpy array</span>
+<span class="sd">            Panel of stacked data. Each row corresponds to an observation</span>
+<span class="sd">            (i, t) where i denotes the entity index and t denotes</span>
+<span class="sd">            the time index. The panel may be unbalanced. If an observation</span>
+<span class="sd">            contains missing data NaN will be returned. Note that the</span>
+<span class="sd">            number of passed characteristics n_characts must match the</span>
+<span class="sd">            number of characteristics used when fitting the regressor.</span>
+<span class="sd">            The columns of the panel are organized in the following order:</span>
+
+<span class="sd">            - Column 1: entity id (i)</span>
+<span class="sd">            - Column 2: time index (t)</span>
+<span class="sd">            - Column 3 to column 3+n_characts: characteristics.</span>
+
+<span class="sd">        mean_factor: boolean</span>
+<span class="sd">            If true, the estimated factors are averaged in the time-series</span>
+<span class="sd">            before prediction.</span>
+
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Ypred : array-like. The length of the returned array matches the</span>
+<span class="sd">            the length of data. A nan will be returned if there is missing</span>
+<span class="sd">            characteristics information.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;A panel of characteristics data must be provided.&#39;</span><span class="p">)</span>
+
+        <span class="n">n_obs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">Ypred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">n_obs</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_obs</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">,:])):</span>
+                <span class="n">Ypred</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">mean_factor</span><span class="p">:</span>
+                    <span class="n">Ypred</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="mi">2</span><span class="p">:]</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span><span class="p">)</span>\
+                        <span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Factors_Est</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">Ypred</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="mi">2</span><span class="p">:]</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span><span class="p">)</span>\
+                        <span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Factors_Est</span><span class="p">[:,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dates</span> <span class="o">==</span> <span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="mi">1</span><span class="p">]])</span>
+        <span class="k">return</span> <span class="n">Ypred</span></div>
+
+<div class="viewcode-block" id="IPCARegressor.predictOOS"><a class="viewcode-back" href="../../index.html#ipca.IPCARegressor.predictOOS">[docs]</a>    <span class="k">def</span> <span class="nf">predictOOS</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">mean_factor</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Predicts time t+1 observation using an out-of-sample design.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data :  numpy array</span>
+<span class="sd">            Panel of stacked data. Each row corresponds to an observation</span>
+<span class="sd">            (i,t) where i denotes the entity index and t denotes</span>
+<span class="sd">            the time index. All data must correspond to time t, i.e. all</span>
+<span class="sd">            observations occur on the same date.</span>
+<span class="sd">            If an observation contains missing data NaN will be returned.</span>
+<span class="sd">            Note that the number of characteristics (n_characts) passed,</span>
+<span class="sd">            has to match the number of characteristics used when fitting</span>
+<span class="sd">            the regressor.</span>
+<span class="sd">            The columns of the panel are organized in the following order:</span>
+
+<span class="sd">            - Column 1: entity id (i)</span>
+<span class="sd">            - Column 2: time index (t)</span>
+<span class="sd">            - Column 3: dependent variable corresponding to observation (i,t)</span>
+<span class="sd">            - Column 4 to column 4+n_characts: characteristics.</span>
+
+<span class="sd">        mean_factor: boolean</span>
+<span class="sd">            If true, the estimated factors are averaged in the time-series</span>
+<span class="sd">            before prediction.</span>
+
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Ypred : array-like. The length of the returned array matches the</span>
+<span class="sd">            the length of data. A nan will be returned if there is missing</span>
+<span class="sd">            characteristics information.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;A panel of characteristics data must be provided.&#39;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">data</span><span class="p">[:,</span><span class="mi">1</span><span class="p">]))</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;The panel must only have a single timestamp.&#39;</span><span class="p">)</span>
+
+        <span class="n">n_obs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">Ypred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">n_obs</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+
+        <span class="n">Z</span> <span class="o">=</span> <span class="n">data</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">:]</span>
+        <span class="n">Y</span> <span class="o">=</span> <span class="n">data</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span>
+
+        <span class="c1"># Compute realized factor returns</span>
+        <span class="n">Numer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">Z</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">Y</span><span class="p">)</span>
+        <span class="n">Denom</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">Z</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">Z</span><span class="p">)</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span><span class="p">)</span>
+        <span class="n">Factor_OOS</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">Denom</span><span class="p">,</span> <span class="n">Numer</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)))</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_obs</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">,:])):</span>
+                <span class="n">Ypred</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">mean_factor</span><span class="p">:</span>
+                    <span class="n">Ypred</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">Z</span><span class="p">[</span><span class="n">i</span><span class="p">,:]</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span><span class="p">)</span>\
+                        <span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Factors_Est</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">Ypred</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">Z</span><span class="p">[</span><span class="n">i</span><span class="p">,:]</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span><span class="p">)</span>\
+                        <span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">Factor_OOS</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Ypred</span></div>
 
     <span class="k">def</span> <span class="nf">_fit_ipca</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Z</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">PSF</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -294,20 +438,16 @@
         <span class="n">n_characts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="n">Z</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
         <span class="c1"># n_samples = np.size(Z, axis=0)</span>
 
-        <span class="c1"># Handle pre-specified factors</span>
-        <span class="k">if</span> <span class="n">PSF</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">UsePreSpecFactors</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">UsePreSpecFactors</span> <span class="o">=</span> <span class="kc">False</span>
-
         <span class="c1"># Handle intercept, effectively treating it as a prespecified factor</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">intercept</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">n_factors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_factors</span> <span class="o">+</span> <span class="mi">1</span>
+            <span class="n">n_factors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_factors</span> <span class="o">+</span> <span class="mi">1</span>
             <span class="k">if</span> <span class="n">PSF</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">PSF</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">PSF</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_time</span><span class="p">))),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
             <span class="k">elif</span> <span class="n">PSF</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">UsePreSpecFactors</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">UsePreSpecFactors</span> <span class="o">=</span> <span class="kc">True</span>
                 <span class="n">PSF</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_time</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">n_factors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_factors</span>
 
         <span class="c1"># Check whether elements are missing</span>
         <span class="n">nan_mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nan_check</span><span class="p">(</span><span class="n">Z</span><span class="p">,</span> <span class="n">Y</span><span class="p">)</span>
@@ -326,10 +466,10 @@
 
         <span class="c1"># Initialize the Alternating Least Squares Procedure</span>
         <span class="n">Gamma_Old</span><span class="p">,</span> <span class="n">s</span><span class="p">,</span> <span class="n">v</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">svd</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
-        <span class="n">Gamma_Old</span> <span class="o">=</span> <span class="n">Gamma_Old</span><span class="p">[:,</span> <span class="p">:</span><span class="bp">self</span><span class="o">.</span><span class="n">n_factors</span><span class="p">]</span>
-        <span class="n">s</span> <span class="o">=</span> <span class="n">s</span><span class="p">[:</span><span class="bp">self</span><span class="o">.</span><span class="n">n_factors</span><span class="p">]</span>
+        <span class="n">Gamma_Old</span> <span class="o">=</span> <span class="n">Gamma_Old</span><span class="p">[:,</span> <span class="p">:</span><span class="n">n_factors</span><span class="p">]</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="n">s</span><span class="p">[:</span><span class="n">n_factors</span><span class="p">]</span>
         <span class="n">v</span> <span class="o">=</span> <span class="n">v</span><span class="o">.</span><span class="n">T</span>
-        <span class="n">v</span> <span class="o">=</span> <span class="n">v</span><span class="p">[:,</span> <span class="p">:</span><span class="bp">self</span><span class="o">.</span><span class="n">n_factors</span><span class="p">]</span>
+        <span class="n">v</span> <span class="o">=</span> <span class="n">v</span><span class="p">[:,</span> <span class="p">:</span><span class="n">n_factors</span><span class="p">]</span>
         <span class="n">Factor_Old</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">s</span><span class="p">)</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
 
         <span class="c1"># Estimation Step</span>
@@ -337,7 +477,7 @@
         <span class="nb">iter</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="k">while</span><span class="p">((</span><span class="nb">iter</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_iter</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">tol_current</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">iter_tol</span><span class="p">)):</span>
 
-            <span class="k">if</span> <span class="n">UsePreSpecFactors</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">UsePreSpecFactors</span><span class="p">:</span>
                 <span class="n">Gamma_New</span><span class="p">,</span> <span class="n">Factor_New</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ALS_fit</span><span class="p">(</span><span class="n">Gamma_Old</span><span class="p">,</span> <span class="n">W</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span>
                                                       <span class="n">nan_mask</span><span class="p">,</span> <span class="n">PSF</span><span class="o">=</span><span class="n">PSF</span><span class="p">)</span>
                 <span class="n">tol_current</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">amax</span><span class="p">(</span><span class="n">Gamma_New</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
@@ -354,8 +494,8 @@
             <span class="n">Factor_Old</span> <span class="o">=</span> <span class="n">Factor_New</span>
             <span class="n">Gamma_Old</span> <span class="o">=</span> <span class="n">Gamma_New</span>
             <span class="nb">iter</span> <span class="o">+=</span> <span class="mi">1</span>
-            <span class="nb">print</span><span class="p">(</span><span class="n">tol_current</span><span class="p">)</span>
-
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Step&#39;</span><span class="p">,</span> <span class="nb">iter</span><span class="p">,</span> <span class="s1">&#39;- Aggregate Update:&#39;</span><span class="p">,</span> <span class="n">tol_current</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;-- Convergence Reached --&#39;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">Gamma_New</span><span class="p">,</span> <span class="n">Factor_New</span>
 
     <span class="k">def</span> <span class="nf">_ALS_fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Gamma_Old</span><span class="p">,</span> <span class="n">W</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">nan_mask</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
@@ -367,15 +507,15 @@
 <span class="sd">        &quot;&quot;&quot;</span>
 
         <span class="c1"># Determine whether any per-specified factors were passed</span>
-        <span class="n">UsePreSpecFactors</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="k">if</span> <span class="s1">&#39;PSF&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">UsePreSpecFactors</span><span class="p">:</span>
             <span class="n">PSF</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;PSF&quot;</span><span class="p">)</span>
             <span class="n">K_PSF</span><span class="p">,</span> <span class="n">T_PSF</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="n">PSF</span><span class="p">)</span>
-            <span class="n">UsePreSpecFactors</span> <span class="o">=</span> <span class="kc">True</span>
+
 
         <span class="c1"># Determine number of factors to be estimated</span>
         <span class="n">T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="n">nan_mask</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">UsePreSpecFactors</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">UsePreSpecFactors</span><span class="p">:</span>
             <span class="n">L</span><span class="p">,</span> <span class="n">Ktilde</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="n">Gamma_Old</span><span class="p">)</span>
             <span class="n">K</span> <span class="o">=</span> <span class="n">Ktilde</span> <span class="o">-</span> <span class="n">K_PSF</span>
 
@@ -386,7 +526,7 @@
         <span class="c1"># ALS Step 1</span>
         <span class="n">F_New</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
         <span class="k">if</span> <span class="n">K</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">UsePreSpecFactors</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">UsePreSpecFactors</span><span class="p">:</span>
                 <span class="n">F_New</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">K</span><span class="p">,</span> <span class="n">T</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
                 <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">T</span><span class="p">):</span>
                     <span class="n">m1</span> <span class="o">=</span> <span class="n">Gamma_Old</span><span class="p">[:,</span> <span class="p">:</span><span class="n">K</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">W</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">t</span><span class="p">])</span>\
@@ -410,7 +550,7 @@
         <span class="n">Numer</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">L</span><span class="o">*</span><span class="n">Ktilde</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mi">0</span><span class="p">)</span>
         <span class="n">Denom</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">L</span><span class="o">*</span><span class="n">Ktilde</span><span class="p">,</span> <span class="n">L</span><span class="o">*</span><span class="n">Ktilde</span><span class="p">),</span> <span class="mi">0</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">UsePreSpecFactors</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">UsePreSpecFactors</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">K</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">T</span><span class="p">):</span>
                     <span class="n">Numer</span> <span class="o">=</span> <span class="n">Numer</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">kron</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span> <span class="n">t</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span>
@@ -499,7 +639,7 @@
 
         <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">nan_mask</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_unpack_panel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">P</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_unpack_panel_XY</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">P</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot; Converts a stacked panel of data where each row corresponds to an</span>
 <span class="sd">        observation (i, t) into a tensor of dimensions (N, L, T) where N is the</span>
 <span class="sd">        number of unique entities, L is the number of characteristics and T is</span>
@@ -562,6 +702,10 @@
         <span class="n">Z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dstack</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">P</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">:],</span> <span class="n">N</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
         <span class="n">Z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">swapaxes</span><span class="p">(</span><span class="n">Z</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
         <span class="n">Y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">P</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span> <span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">T</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">ids</span> <span class="o">=</span> <span class="n">ids</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dates</span> <span class="o">=</span> <span class="n">dates</span>
+
         <span class="k">return</span> <span class="n">Z</span><span class="p">,</span> <span class="n">Y</span></div>
 </pre></div>
 

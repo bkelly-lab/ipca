@@ -163,7 +163,11 @@ Principal Components Analysis framework by Kelly, Pruitt, Su (2017)
 <col class="field-body" />
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
-<li><strong>n_factors</strong> (<em>int, default=1</em>) – The number of latent factors to estimate</li>
+<li><strong>n_factors</strong> (<em>int, default=1</em>) – The number of latent factors to estimate. Note, the number of
+estimated factors is automatically reduced by the number of
+pre-specified factors. For example, if n_factors = 2 and one
+pre-specified factor is passed, then IPCARegressor will estimate
+one factor estimated in addition to the pre-specified factor.</li>
 <li><strong>intercept</strong> (<em>boolean, default=False</em>) – Determines whether the model is estimated with or without an intercept</li>
 <li><strong>max_iter</strong> (<em>int, default=10000</em>) – Maximum number of alternating least squares updates before the
 estimation is stopped</li>
@@ -182,31 +186,27 @@ scheme.</p>
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first">
-<li><p class="first"><strong>data</strong> (<em>numpy array</em>) – Panel of stacked data. Each row corresponds to an observation
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>data</strong> (<em>numpy array</em>) – Panel of stacked data. Each row corresponds to an observation
 (i, t) where i denotes the entity index and t denotes
 the time index. The panel may be unbalanced. The number of unique
 entities is n_samples, the number of unique dates is n_time, and
 the number of characteristics used as instruments is n_characts.
-The columns of the panel are organized in the following order:</p>
-<ul class="simple">
+The columns of the panel are organized in the following order:<ul>
 <li>Column 1: entity id (i)</li>
 <li>Column 2: time index (t)</li>
 <li>Column 3: dependent variable corresponding to observation (i,t)</li>
 <li>Column 4 to column 4+n_characts: characteristics.</li>
 </ul>
-<p>The panel is rearranged into a tensor of dimension
-(n_samples, n_characts, n_time)</p>
 </li>
-<li><p class="first"><strong>PSF</strong> (<em>numpy array, optional</em>) – Set of pre-specified factors as matrix of dimension (n_PSF, n_time)</p>
-</li>
+<li><strong>PSF</strong> (<em>numpy array, optional</em>) – Set of pre-specified factors as matrix of dimension (n_PSF, n_time)</li>
 </ul>
 </td>
 </tr>
 <tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last"><ul class="simple">
 <li><strong>Gamma</strong> (<em>numpy array</em>) – Array with dimensions (n_characts, n_factors) containing the
 mapping between characteristics and factors loadings. If there
-are n_prespec many pre-specified factors in the model then the
+are n_PSF many pre-specified factors in the model then the
 matrix returned is of dimension (n_characts, (n_factors+n_PSF)).
 If an intercept is included in the model, its loadings are returned
 in the last column of Gamma.</li>
@@ -217,6 +217,83 @@ corresponding to the n_factors - n_PSF many factors estimated on
 top of the pre-specified ones.</li>
 </ul>
 </p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="ipca.IPCARegressor.predict">
+<code class="descname">predict</code><span class="sig-paren">(</span><em>data=None</em>, <em>mean_factor=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Predicts fitted values for a previously fitted regressor</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>data</strong> (<em>numpy array</em>) – Panel of stacked data. Each row corresponds to an observation
+(i, t) where i denotes the entity index and t denotes
+the time index. The panel may be unbalanced. If an observation
+contains missing data NaN will be returned. Note that the
+number of passed characteristics n_characts must match the
+number of characteristics used when fitting the regressor.
+The columns of the panel are organized in the following order:<ul>
+<li>Column 1: entity id (i)</li>
+<li>Column 2: time index (t)</li>
+<li>Column 3 to column 3+n_characts: characteristics.</li>
+</ul>
+</li>
+<li><strong>mean_factor</strong> (<em>boolean</em>) – If true, the estimated factors are averaged in the time-series
+before prediction.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>Ypred</strong> – the length of data. A nan will be returned if there is missing
+characteristics information.</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">array-like. The length of the returned array matches the</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="ipca.IPCARegressor.predictOOS">
+<code class="descname">predictOOS</code><span class="sig-paren">(</span><em>data=None</em>, <em>mean_factor=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.predictOOS"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.predictOOS" title="Permalink to this definition">¶</a></dt>
+<dd><p>Predicts time t+1 observation using an out-of-sample design.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>data</strong> (<em>numpy array</em>) – Panel of stacked data. Each row corresponds to an observation
+(i,t) where i denotes the entity index and t denotes
+the time index. All data must correspond to time t, i.e. all
+observations occur on the same date.
+If an observation contains missing data NaN will be returned.
+Note that the number of characteristics (n_characts) passed,
+has to match the number of characteristics used when fitting
+the regressor.
+The columns of the panel are organized in the following order:<ul>
+<li>Column 1: entity id (i)</li>
+<li>Column 2: time index (t)</li>
+<li>Column 3: dependent variable corresponding to observation (i,t)</li>
+<li>Column 4 to column 4+n_characts: characteristics.</li>
+</ul>
+</li>
+<li><strong>mean_factor</strong> (<em>boolean</em>) – If true, the estimated factors are averaged in the time-series
+before prediction.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>Ypred</strong> – the length of data. A nan will be returned if there is missing
+characteristics information.</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">array-like. The length of the returned array matches the</p>
 </td>
 </tr>
 </tbody>
