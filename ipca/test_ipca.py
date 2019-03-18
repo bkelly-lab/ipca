@@ -51,4 +51,3 @@ data_OOS = data[data[:,1]==1954,:]
 regr.fit(data=data_IS)
 
 Ypred = regr.predictOOS(data=data_OOS, mean_factor=True)
-raise ValueError
