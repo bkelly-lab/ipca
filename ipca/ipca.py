@@ -161,7 +161,9 @@ class IPCARegressor:
 
         Returns
         -------
-        Ypred : array-like. The length of the returned array matches the
+
+        Ypred : numpy array
+            The length of the returned array matches the
             the length of data. A nan will be returned if there is missing
             characteristics information.
         """
@@ -213,7 +215,9 @@ class IPCARegressor:
 
         Returns
         -------
-        Ypred : array-like. The length of the returned array matches the
+        
+        Ypred : numpy array
+            The length of the returned array matches the
             the length of data. A nan will be returned if there is missing
             characteristics information.
         """
