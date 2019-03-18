@@ -518,7 +518,7 @@ class IPCARegressor:
 
         Returns
         -------
-        Z: array-like, tensor of dimensions (N, L, T), containing
+        P: array-like, tensor of dimensions (N, L, T), containing
             the characteristics
 
         Y: array-like, matrix of dimension, containing the dependent variable.
@@ -557,14 +557,13 @@ class IPCARegressor:
             P = np.append(P, temp, axis=0)
         # Sort observations such that T observations for each n in N are
         # stacked vertically
-        ind = np.lexsort((P[:, 1], P[:, 0]))
-        P = P[ind, :]
+        P = P[np.lexsort((P[:, 1], P[:, 0])), :]
         # Reshape the panel into Z (N, L, T) and Y(N, T)
-        Z = np.dstack(np.split(P[:, 3:], N, axis=0))
-        Z = np.swapaxes(Z, 0, 2)
+        P = np.dstack(np.split(P[:, 3:], N, axis=0))
+        P = np.swapaxes(P, 0, 2)
         Y = np.reshape(P[:, 2], (N, T))
 
         self.ids = ids
         self.dates = dates
 
-        return Z, Y
+        return P, Y

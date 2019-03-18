@@ -1,0 +1,15 @@
+/usr/local/lib/python3.7/site-packages/ipca-0.3.3-py3.7.egg/EGG-INFO/PKG-INFO
+/usr/local/lib/python3.7/site-packages/ipca-0.3.3-py3.7.egg/EGG-INFO/not-zip-safe
+/usr/local/lib/python3.7/site-packages/ipca-0.3.3-py3.7.egg/EGG-INFO/SOURCES.txt
+/usr/local/lib/python3.7/site-packages/ipca-0.3.3-py3.7.egg/EGG-INFO/requires.txt
+/usr/local/lib/python3.7/site-packages/ipca-0.3.3-py3.7.egg/EGG-INFO/top_level.txt
+/usr/local/lib/python3.7/site-packages/ipca-0.3.3-py3.7.egg/EGG-INFO/dependency_links.txt
+/usr/local/lib/python3.7/site-packages/ipca-0.3.3-py3.7.egg/ipca/__init__.py
+/usr/local/lib/python3.7/site-packages/ipca-0.3.3-py3.7.egg/ipca/ipca.py
+/usr/local/lib/python3.7/site-packages/ipca-0.3.3-py3.7.egg/ipca/test_ipca.py
+/usr/local/lib/python3.7/site-packages/ipca-0.3.3-py3.7.egg/ipca/__pycache__/test_ipca.cpython-37.pyc
+/usr/local/lib/python3.7/site-packages/ipca-0.3.3-py3.7.egg/ipca/__pycache__/__init__.cpython-37.pyc
+/usr/local/lib/python3.7/site-packages/ipca-0.3.3-py3.7.egg/ipca/__pycache__/ipca.cpython-37.pyc
+/usr/local/bin/f2py
+/usr/local/bin/f2py3
+/usr/local/bin/f2py3.7
