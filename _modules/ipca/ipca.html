@@ -661,7 +661,7 @@
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        Z: array-like, tensor of dimensions (N, L, T), containing</span>
+<span class="sd">        P: array-like, tensor of dimensions (N, L, T), containing</span>
 <span class="sd">            the characteristics</span>
 
 <span class="sd">        Y: array-like, matrix of dimension, containing the dependent variable.</span>
@@ -700,17 +700,16 @@
             <span class="n">P</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">temp</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
         <span class="c1"># Sort observations such that T observations for each n in N are</span>
         <span class="c1"># stacked vertically</span>
-        <span class="n">ind</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">lexsort</span><span class="p">((</span><span class="n">P</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">P</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]))</span>
-        <span class="n">P</span> <span class="o">=</span> <span class="n">P</span><span class="p">[</span><span class="n">ind</span><span class="p">,</span> <span class="p">:]</span>
+        <span class="n">P</span> <span class="o">=</span> <span class="n">P</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">lexsort</span><span class="p">((</span><span class="n">P</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">P</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">])),</span> <span class="p">:]</span>
         <span class="c1"># Reshape the panel into Z (N, L, T) and Y(N, T)</span>
-        <span class="n">Z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dstack</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">P</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">:],</span> <span class="n">N</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
-        <span class="n">Z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">swapaxes</span><span class="p">(</span><span class="n">Z</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">P</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dstack</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">P</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">:],</span> <span class="n">N</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+        <span class="n">P</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">swapaxes</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
         <span class="n">Y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">P</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span> <span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">T</span><span class="p">))</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">ids</span> <span class="o">=</span> <span class="n">ids</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dates</span> <span class="o">=</span> <span class="n">dates</span>
 
-        <span class="k">return</span> <span class="n">Z</span><span class="p">,</span> <span class="n">Y</span></div>
+        <span class="k">return</span> <span class="n">P</span><span class="p">,</span> <span class="n">Y</span></div>
 </pre></div>
 
            </div>
