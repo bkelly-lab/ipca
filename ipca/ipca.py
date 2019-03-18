@@ -551,6 +551,7 @@ class IPCARegressor:
             bar.update(n_i)
         bar.finish()
 
+
         # Append the missing observations to create balanced panel
         if len(temp) > 0:
             temp = np.concatenate(temp, axis=0)
@@ -558,10 +559,11 @@ class IPCARegressor:
         # Sort observations such that T observations for each n in N are
         # stacked vertically
         P = P[np.lexsort((P[:, 1], P[:, 0])), :]
+        Y = np.reshape(P[:, 2], (N, T))
         # Reshape the panel into Z (N, L, T) and Y(N, T)
         P = np.dstack(np.split(P[:, 3:], N, axis=0))
         P = np.swapaxes(P, 0, 2)
-        Y = np.reshape(P[:, 2], (N, T))
+
 
         self.ids = ids
         self.dates = dates
