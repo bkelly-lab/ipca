@@ -47,14 +47,14 @@ class IPCARegressor:
             if k != 'self':
                 setattr(self, k, v)
 
-    def fit(self, data=None, PSF=None):
+    def fit(self, P=None, PSF=None, refit=False):
         """
         Fits the regressor to the data using an alternating least squares
         scheme.
 
         Parameters
         ----------
-        data :  numpy array
+        P :  numpy array
             Panel of stacked data. Each row corresponds to an observation
             (i, t) where i denotes the entity index and t denotes
             the time index. The panel may be unbalanced. The number of unique
@@ -69,6 +69,12 @@ class IPCARegressor:
 
         PSF : numpy array, optional
             Set of pre-specified factors as matrix of dimension (n_PSF, n_time)
+
+        refit : boolean, optional
+            Indicates whether the regressor should be re-fit. If set to True
+            the function will skip unpacking the panel into a tensor and
+            instead use the stored values from the previous fit. Note, it is
+            still necessary to pass the previously used P.
 
         Returns
         -------
@@ -90,8 +96,13 @@ class IPCARegressor:
 
         """
 
-        if data is None:
+        if P is None:
             raise ValueError('Must pass panel data.')
+
+        if self.intercept and (self.n_factors == np.size(P, axis=1)-3):
+            raise ValueError("""Number of factors + intercept higher than
+                                number of characteristics. Reduce number of
+                                factors or set intercept to false.""")
 
         # Handle pre-specified factors
         if PSF is not None:
@@ -100,7 +111,8 @@ class IPCARegressor:
             self.UsePreSpecFactors = False
 
         # Unpack the Panel
-        Z, Y = self._unpack_panel_XY(data)
+        if not refit:
+            Z, Y = self._unpack_panel_XY(P)
 
         if self.UsePreSpecFactors:
             if np.size(PSF, axis=0) == self.n_factors:
@@ -111,7 +123,10 @@ class IPCARegressor:
                               "factors increase n_factors.")
 
         # Run IPCA
-        Gamma, Factors = self._fit_ipca(Z=Z, Y=Y, PSF=PSF)
+        if not refit:
+            Gamma, Factors = self._fit_ipca(Z=Z, Y=Y, PSF=PSF)
+        else:
+            Gamma, Factors = self._fit_ipca(Z=self.Z, Y=self.Y, PSF=PSF)
 
         # Store estimates
         self.Gamma_Est = Gamma
@@ -126,22 +141,26 @@ class IPCARegressor:
             self.Factors_Est = np.concatenate((Factors, PSF), axis=0)
 
         # Compute goodness of fit measures
-        data_x = np.delete(data, 2, axis=1)
-        Ypred = self.predict(data_x, mean_factor=False)
-        Ytrue = data[:, 2]
+        Ypred = self.predict(np.delete(P, 2, axis=1), mean_factor=False)
+        Ytrue = P[:, 2]
         self.r2_total = 1-np.nansum((Ypred-Ytrue)**2)/np.nansum(Ytrue**2)
-        Ypred = self.predict(data_x, mean_factor=True)
+        Ypred = self.predict(np.delete(P, 2, axis=1), mean_factor=True)
         self.r2_pred = 1-np.nansum((Ypred-Ytrue)**2)/np.nansum(Ytrue**2)
+
+        # Save Panel for Re-fitting
+        if not refit:
+            self.Z = Z
+            self.Y = Y
 
         return Gamma, Factors
 
-    def predict(self, data=None, mean_factor=False):
+    def predict(self, P=None, mean_factor=False):
         """
         Predicts fitted values for a previously fitted regressor
 
         Parameters
         ----------
-        data :  numpy array
+        P :  numpy array
             Panel of stacked data. Each row corresponds to an observation
             (i, t) where i denotes the entity index and t denotes
             the time index. The panel may be unbalanced. If an observation
@@ -168,31 +187,31 @@ class IPCARegressor:
             characteristics information.
         """
 
-        if data is None:
+        if P is None:
             raise ValueError('A panel of characteristics data must be provided.')
 
-        n_obs = np.size(data, axis=0)
+        n_obs = np.size(P, axis=0)
         Ypred = np.full((n_obs), np.nan)
 
         for i in range(n_obs):
-            if np.any(np.isnan(data[i,:])):
+            if np.any(np.isnan(P[i,:])):
                 Ypred[i] = np.nan
             else:
                 if mean_factor:
-                    Ypred[i] = data[i, 2:].dot(self.Gamma_Est)\
+                    Ypred[i] = P[i, 2:].dot(self.Gamma_Est)\
                         .dot(np.mean(self.Factors_Est, axis=1))
                 else:
-                    Ypred[i] = data[i, 2:].dot(self.Gamma_Est)\
-                        .dot(self.Factors_Est[:, self.dates == data[i, 1]])
+                    Ypred[i] = P[i, 2:].dot(self.Gamma_Est)\
+                        .dot(self.Factors_Est[:, self.dates == P[i, 1]])
         return Ypred
 
-    def predictOOS(self, data=None, mean_factor=False):
+    def predictOOS(self, P=None, mean_factor=False):
         """
         Predicts time t+1 observation using an out-of-sample design.
 
         Parameters
         ----------
-        data :  numpy array
+        P :  numpy array
             Panel of stacked data. Each row corresponds to an observation
             (i,t) where i denotes the entity index and t denotes
             the time index. All data must correspond to time t, i.e. all
@@ -222,24 +241,24 @@ class IPCARegressor:
             characteristics information.
         """
 
-        if data is None:
+        if P is None:
             raise ValueError('A panel of characteristics data must be provided.')
 
-        if len(np.unique(data[:,1])) > 1:
+        if len(np.unique(P[:,1])) > 1:
             raise ValueError('The panel must only have a single timestamp.')
 
-        n_obs = np.size(data, axis=0)
+        n_obs = np.size(P, axis=0)
         Ypred = np.full((n_obs), np.nan)
 
-        Z = data[:, 3:]
-        Y = data[:, 2]
+        Z = P[:, 3:]
+        Y = P[:, 2]
 
         # Compute realized factor returns
         Numer = self.Gamma_Est.T.dot(Z.T).dot(Y)
         Denom = self.Gamma_Est.T.dot(Z.T).dot(Z).dot(self.Gamma_Est)
         Factor_OOS = np.linalg.solve(Denom, Numer.reshape((-1, 1)))
         for i in range(n_obs):
-            if np.any(np.isnan(data[i,:])):
+            if np.any(np.isnan(P[i,:])):
                 Ypred[i] = np.nan
             else:
                 if mean_factor:
@@ -483,7 +502,7 @@ class IPCARegressor:
         # Handle missing observations
         Z_nan = np.isnan(Z)
         Y_nan = np.isnan(Y)
-        nan_mask = np.full((n_samples, n_time), np.nan)
+        nan_mask = np.full((n_samples, n_time), False, dtype=bool)
         # ProgressBar
         bar = progressbar.ProgressBar(maxval=n_samples,
                                       widgets=[progressbar.Bar('=', '[', ']'),
@@ -532,7 +551,6 @@ class IPCARegressor:
         print('The panel dimensions are:')
         print('n_samples:', N, ', n_characts:', L, ', n_time:', T)
 
-
         bar = progressbar.ProgressBar(maxval=N,
                                       widgets=[progressbar.Bar('=', '[', ']'),
                                                ' ', progressbar.Percentage()])
@@ -540,30 +558,29 @@ class IPCARegressor:
         bar.start()
         temp = []
         for n_i, n in enumerate(ids):
-            ixd = np.isin(dates, P[P[:, 0] == n, 1])
+            ixd = np.invert(np.isin(dates, P[P[:, 0] == n, 1]))
             temp_n = np.full((T, L+3), np.nan)
             temp_n[:, 0] = n
             temp_n[:, 1] = dates
-            temp_n = temp_n[np.invert(ixd), :]
+            temp_n = temp_n[ixd, :]
             if np.size(temp_n, axis=0) == 0:
                 continue
             temp.append(temp_n)
             bar.update(n_i)
         bar.finish()
 
-
         # Append the missing observations to create balanced panel
         if len(temp) > 0:
             temp = np.concatenate(temp, axis=0)
             P = np.append(P, temp, axis=0)
+        temp = []
         # Sort observations such that T observations for each n in N are
         # stacked vertically
         P = P[np.lexsort((P[:, 1], P[:, 0])), :]
         Y = np.reshape(P[:, 2], (N, T))
-        # Reshape the panel into Z (N, L, T) and Y(N, T)
+        # Reshape the panel into P (N, L, T) and Y(N, T)
         P = np.dstack(np.split(P[:, 3:], N, axis=0))
         P = np.swapaxes(P, 0, 2)
-
 
         self.ids = ids
         self.dates = dates
