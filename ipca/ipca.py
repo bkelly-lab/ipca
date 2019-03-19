@@ -124,9 +124,9 @@ class IPCARegressor:
 
         # Run IPCA
         if not refit:
-            Gamma, Factors = self._fit_ipca(Z=Z, Y=Y, PSF=PSF)
+            Gamma, Factors = self._fit_ipca(Z=Z, Y=Y, PSF=PSF, refit=False)
         else:
-            Gamma, Factors = self._fit_ipca(Z=self.Z, Y=self.Y, PSF=PSF)
+            Gamma, Factors = self._fit_ipca(Z=self.Z, Y=self.Y, PSF=PSF, refit=True)
 
         # Store estimates
         self.Gamma_Est = Gamma
@@ -269,7 +269,7 @@ class IPCARegressor:
                         .dot(Factor_OOS)
         return Ypred
 
-    def _fit_ipca(self, Z=None, Y=None, PSF=None):
+    def _fit_ipca(self, Z=None, Y=None, PSF=None, refit=False):
         """
         Fits the regressor to the data using an alternating least squares
         scheme.
@@ -283,6 +283,9 @@ class IPCARegressor:
 
         PSF : optional, array-like of shape (n_PSF, n_time), i.e.
             pre-specified factors
+
+        refit : optional, boolean
+            determines whether previously fitted regressor is used
 
 
         Returns
@@ -330,7 +333,11 @@ class IPCARegressor:
             n_factors = self.n_factors
 
         # Check whether elements are missing
-        nan_mask = self._nan_check(Z, Y)
+        if not refit:
+            nan_mask = self._nan_check(Z, Y)
+        else:
+            nan_mask = self.nan_mask
+            
         # Define characteristics weighted matrices
         X = np.full((n_characts, n_time), np.nan)
         for t in range(n_time):
@@ -376,6 +383,10 @@ class IPCARegressor:
             iter += 1
             print('Step', iter, '- Aggregate Update:', tol_current)
         print('-- Convergence Reached --')
+
+        # Store nan_mask
+        self.nan_mask = nan_mask
+
         return Gamma_New, Factor_New
 
     def _ALS_fit(self, Gamma_Old, W, X, nan_mask, **kwargs):
