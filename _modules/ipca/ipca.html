@@ -267,9 +267,9 @@
 
         <span class="c1"># Run IPCA</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">refit</span><span class="p">:</span>
-            <span class="n">Gamma</span><span class="p">,</span> <span class="n">Factors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fit_ipca</span><span class="p">(</span><span class="n">Z</span><span class="o">=</span><span class="n">Z</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span> <span class="n">PSF</span><span class="o">=</span><span class="n">PSF</span><span class="p">)</span>
+            <span class="n">Gamma</span><span class="p">,</span> <span class="n">Factors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fit_ipca</span><span class="p">(</span><span class="n">Z</span><span class="o">=</span><span class="n">Z</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span> <span class="n">PSF</span><span class="o">=</span><span class="n">PSF</span><span class="p">,</span> <span class="n">refit</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">Gamma</span><span class="p">,</span> <span class="n">Factors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fit_ipca</span><span class="p">(</span><span class="n">Z</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">Z</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">Y</span><span class="p">,</span> <span class="n">PSF</span><span class="o">=</span><span class="n">PSF</span><span class="p">)</span>
+            <span class="n">Gamma</span><span class="p">,</span> <span class="n">Factors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fit_ipca</span><span class="p">(</span><span class="n">Z</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">Z</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">Y</span><span class="p">,</span> <span class="n">PSF</span><span class="o">=</span><span class="n">PSF</span><span class="p">,</span> <span class="n">refit</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
         <span class="c1"># Store estimates</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span> <span class="o">=</span> <span class="n">Gamma</span>
@@ -412,7 +412,7 @@
                         <span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">Factor_OOS</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">Ypred</span></div>
 
-    <span class="k">def</span> <span class="nf">_fit_ipca</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Z</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">PSF</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_fit_ipca</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Z</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">PSF</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">refit</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Fits the regressor to the data using an alternating least squares</span>
 <span class="sd">        scheme.</span>
@@ -426,6 +426,9 @@
 
 <span class="sd">        PSF : optional, array-like of shape (n_PSF, n_time), i.e.</span>
 <span class="sd">            pre-specified factors</span>
+
+<span class="sd">        refit : optional, boolean</span>
+<span class="sd">            determines whether previously fitted regressor is used</span>
 
 
 <span class="sd">        Returns</span>
@@ -473,7 +476,11 @@
             <span class="n">n_factors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_factors</span>
 
         <span class="c1"># Check whether elements are missing</span>
-        <span class="n">nan_mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nan_check</span><span class="p">(</span><span class="n">Z</span><span class="p">,</span> <span class="n">Y</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">refit</span><span class="p">:</span>
+            <span class="n">nan_mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nan_check</span><span class="p">(</span><span class="n">Z</span><span class="p">,</span> <span class="n">Y</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">nan_mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">nan_mask</span>
+            
         <span class="c1"># Define characteristics weighted matrices</span>
         <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">n_characts</span><span class="p">,</span> <span class="n">n_time</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_time</span><span class="p">):</span>
@@ -519,6 +526,10 @@
             <span class="nb">iter</span> <span class="o">+=</span> <span class="mi">1</span>
             <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Step&#39;</span><span class="p">,</span> <span class="nb">iter</span><span class="p">,</span> <span class="s1">&#39;- Aggregate Update:&#39;</span><span class="p">,</span> <span class="n">tol_current</span><span class="p">)</span>
         <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;-- Convergence Reached --&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Store nan_mask</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nan_mask</span> <span class="o">=</span> <span class="n">nan_mask</span>
+
         <span class="k">return</span> <span class="n">Gamma_New</span><span class="p">,</span> <span class="n">Factor_New</span>
 
     <span class="k">def</span> <span class="nf">_ALS_fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Gamma_Old</span><span class="p">,</span> <span class="n">W</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">nan_mask</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
