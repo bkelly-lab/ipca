@@ -179,7 +179,7 @@ estimation is stopped</li>
 </table>
 <dl class="method">
 <dt id="ipca.IPCARegressor.fit">
-<code class="descname">fit</code><span class="sig-paren">(</span><em>data=None</em>, <em>PSF=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.fit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.fit" title="Permalink to this definition">¶</a></dt>
+<code class="descname">fit</code><span class="sig-paren">(</span><em>P=None</em>, <em>PSF=None</em>, <em>refit=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.fit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.fit" title="Permalink to this definition">¶</a></dt>
 <dd><p>Fits the regressor to the data using an alternating least squares
 scheme.</p>
 <table class="docutils field-list" frame="void" rules="none">
@@ -187,7 +187,7 @@ scheme.</p>
 <col class="field-body" />
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>data</strong> (<em>numpy array</em>) – Panel of stacked data. Each row corresponds to an observation
+<li><strong>P</strong> (<em>numpy array</em>) – Panel of stacked data. Each row corresponds to an observation
 (i, t) where i denotes the entity index and t denotes
 the time index. The panel may be unbalanced. The number of unique
 entities is n_samples, the number of unique dates is n_time, and
@@ -200,6 +200,10 @@ The columns of the panel are organized in the following order:<ul>
 </ul>
 </li>
 <li><strong>PSF</strong> (<em>numpy array, optional</em>) – Set of pre-specified factors as matrix of dimension (n_PSF, n_time)</li>
+<li><strong>refit</strong> (<em>boolean, optional</em>) – Indicates whether the regressor should be re-fit. If set to True
+the function will skip unpacking the panel into a tensor and
+instead use the stored values from the previous fit. Note, it is
+still necessary to pass the previously used P.</li>
 </ul>
 </td>
 </tr>
@@ -225,14 +229,14 @@ top of the pre-specified ones.</li>
 
 <dl class="method">
 <dt id="ipca.IPCARegressor.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>data=None</em>, <em>mean_factor=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.predict" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict</code><span class="sig-paren">(</span><em>P=None</em>, <em>mean_factor=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Predicts fitted values for a previously fitted regressor</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>data</strong> (<em>numpy array</em>) – Panel of stacked data. Each row corresponds to an observation
+<li><strong>P</strong> (<em>numpy array</em>) – Panel of stacked data. Each row corresponds to an observation
 (i, t) where i denotes the entity index and t denotes
 the time index. The panel may be unbalanced. If an observation
 contains missing data NaN will be returned. Note that the
@@ -263,14 +267,14 @@ characteristics information.</p>
 
 <dl class="method">
 <dt id="ipca.IPCARegressor.predictOOS">
-<code class="descname">predictOOS</code><span class="sig-paren">(</span><em>data=None</em>, <em>mean_factor=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.predictOOS"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.predictOOS" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predictOOS</code><span class="sig-paren">(</span><em>P=None</em>, <em>mean_factor=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.predictOOS"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.predictOOS" title="Permalink to this definition">¶</a></dt>
 <dd><p>Predicts time t+1 observation using an out-of-sample design.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>data</strong> (<em>numpy array</em>) – Panel of stacked data. Each row corresponds to an observation
+<li><strong>P</strong> (<em>numpy array</em>) – Panel of stacked data. Each row corresponds to an observation
 (i,t) where i denotes the entity index and t denotes
 the time index. All data must correspond to time t, i.e. all
 observations occur on the same date.
