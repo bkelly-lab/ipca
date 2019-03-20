@@ -26,6 +26,7 @@ data.firm = data.firm.apply(lambda x: ID[x])
 data = data[['firm', 'year', 'invest', 'value', 'capital']]
 # Convert to numpy
 data = data.to_numpy()
+data = np.genfromtxt('../../../TESTDATA/foo.csv', delimiter=',')
 PSF = np.random.randn(len(np.unique(data[:, 1])), 1)
 PSF = PSF.reshape((1, -1))
 
@@ -35,9 +36,20 @@ Gamma_New, Factor_New = regr.fit(P=data)
 # Obtain Goodness of fit
 print('R2total', regr.r2_total)
 print('R2pred', regr.r2_pred)
+print(Gamma_New)
+print(Factor_New)
+regr = IPCARegressor(n_factors=1, intercept=False)
+Gamma_New, Factor_New = regr.fit(P=data)
+# Obtain Goodness of fit
+print('R2total', regr.r2_total)
+print('R2pred', regr.r2_pred)
+print(Gamma_New)
+print(Factor_New)
+
 # Use the fitted regressor to predict
 data_x = np.delete(data, 2, axis=1)
 Ypred = regr.predict(P=data_x)
+
 
 # Test refitting the IPCARegressor with previous data but different n_factors
 regr.n_factors = 2

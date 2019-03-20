@@ -1,7 +1,7 @@
 import numpy as np
 import progressbar
 import warnings
-
+from numba import jit
 
 class IPCARegressor:
     """
@@ -131,9 +131,6 @@ class IPCARegressor:
                                             nan_mask=self.nan_mask,
                                             PSF=PSF, refit=True)
 
-        # Store estimates
-        self.Gamma_Est = Gamma
-        self.Factors_Est = Factors
 
         if self.UsePreSpecFactors:
             if self.intercept and PSF is not None:
@@ -141,11 +138,15 @@ class IPCARegressor:
             else:
                 PSF = np.ones((1, len(self.dates)))
         if self.UsePreSpecFactors:
-            self.Factors_Est = np.concatenate((Factors, PSF), axis=0)
+            Factors = np.concatenate((Factors, PSF), axis=0)
+
+        # Store estimates
+        self.Gamma_Est = Gamma
+        self.Factors_Est = Factors
 
         # Compute goodness of fit measures
-        Ypred = self.predict(np.delete(P, 2, axis=1), mean_factor=False)
         Ytrue = P[:, 2]
+        Ypred = self.predict(np.delete(P, 2, axis=1), mean_factor=False)
         self.r2_total = 1-np.nansum((Ypred-Ytrue)**2)/np.nansum(Ytrue**2)
         Ypred = self.predict(np.delete(P, 2, axis=1), mean_factor=True)
         self.r2_pred = 1-np.nansum((Ypred-Ytrue)**2)/np.nansum(Ytrue**2)
@@ -156,7 +157,7 @@ class IPCARegressor:
             self.Y = Y
             self.nan_mask = nan_mask
 
-        return Gamma, Factors
+        return self.Gamma_Est, self.Factors_Est
 
     def predict(self, P=None, mean_factor=False):
         """
@@ -197,13 +198,15 @@ class IPCARegressor:
         n_obs = np.size(P, axis=0)
         Ypred = np.full((n_obs), np.nan)
 
+        mean_Factors_Est = np.mean(self.Factors_Est, axis=1).reshape((-1, 1))
+
         for i in range(n_obs):
-            if np.any(np.isnan(P[i,:])):
+            if np.any(np.isnan(P[i, :])):
                 Ypred[i] = np.nan
             else:
                 if mean_factor:
                     Ypred[i] = P[i, 2:].dot(self.Gamma_Est)\
-                        .dot(np.mean(self.Factors_Est, axis=1))
+                        .dot(mean_Factors_Est)
                 else:
                     Ypred[i] = P[i, 2:].dot(self.Gamma_Est)\
                         .dot(self.Factors_Est[:, self.dates == P[i, 1]])
@@ -268,7 +271,7 @@ class IPCARegressor:
             else:
                 if mean_factor:
                     Ypred[i] = Z[i,:].dot(self.Gamma_Est)\
-                        .dot(np.mean(self.Factors_Est, axis=1))
+                        .dot(np.mean(self.Factors_Est, axis=1).reshape((-1, 1)))
                 else:
                     Ypred[i] = Z[i,:].dot(self.Gamma_Est)\
                         .dot(Factor_OOS)
@@ -424,14 +427,14 @@ class IPCARegressor:
                     m2 = Gamma_Old[:, :K].T.dot(X[:, t])-Gamma_Old[:, :K].T\
                         .dot(W[:, :, t]).dot(Gamma_Old[:, K:Ktilde])\
                         .dot(PSF[:, t])
-                    F_New[:, t] = np.squeeze(np.linalg.solve(
+                    F_New[:, t] = np.squeeze(self._numba_solve(
                                                     m1, m2.reshape((-1, 1))))
             else:
                 F_New = np.full((K, T), np.nan)
                 for t in range(T):
                     m1 = Gamma_Old.T.dot(W[:, :, t]).dot(Gamma_Old)
                     m2 = Gamma_Old.T.dot(X[:, t])
-                    F_New[:, t] = np.squeeze(np.linalg.solve(
+                    F_New[:, t] = np.squeeze(self._numba_solve(
                                                     m1, m2.reshape((-1, 1))))
         else:
             F_New = np.full((K, T), np.nan)
@@ -472,17 +475,17 @@ class IPCARegressor:
                                         .dot(F_New[:, t].reshape((1, -1)))) \
                     * np.sum(nan_mask[:, t])
 
-        Gamma_New_trans_vec = np.linalg.solve(Denom, Numer)
+        Gamma_New_trans_vec = self._numba_solve(Denom, Numer)
         Gamma_New = Gamma_New_trans_vec.reshape((L, Ktilde))
 
         # Enforce Orthogonality of Gamma_Beta and factors F
         if K > 0:
-            R1 = np.linalg.cholesky(Gamma_New[:, :K].T.dot(Gamma_New[:, :K])).T
-            R2, _, _ = np.linalg.svd(R1.dot(F_New).dot(F_New.T).dot(R1.T))
-            Gamma_New[:, :K] = np.linalg.lstsq(Gamma_New[:, :K].T,
-                                               R1.T, rcond=None)[0]\
+            R1 = self._numba_cholesky(Gamma_New[:, :K].T.dot(Gamma_New[:, :K])).T
+            R2, _, _ = self._numba_svd(R1.dot(F_New).dot(F_New.T).dot(R1.T))
+            Gamma_New[:, :K] = self._numba_lstsq(Gamma_New[:, :K].T,
+                                                 R1.T)[0]\
                 .dot(R2)
-            F_New = np.linalg.solve(R2, R1.dot(F_New))
+            F_New = self._numba_solve(R2, R1.dot(F_New))
 
         # Enforce sign convention for Gamma_Beta and F_New
         if K > 0:
@@ -562,3 +565,23 @@ class IPCARegressor:
         self.dates = dates
 
         return P, Y, nan_mask
+
+    @staticmethod
+    @jit(nopython=True)
+    def _numba_solve(m1, m2):
+        return np.linalg.solve(m1, m2)
+
+    @staticmethod
+    @jit(nopython=True)
+    def _numba_lstsq(m1, m2):
+        return np.linalg.lstsq(m1, m2)
+
+    @staticmethod
+    @jit(nopython=True)
+    def _numba_cholesky(m1):
+        return np.linalg.cholesky(m1)
+
+    @staticmethod
+    @jit(nopython=True)
+    def _numba_svd(m1):
+        return np.linalg.svd(m1)
