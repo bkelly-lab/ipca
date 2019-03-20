@@ -110,9 +110,9 @@ class IPCARegressor:
         else:
             self.UsePreSpecFactors = False
 
-        # Unpack the Panel
+        # Unpack the Panel and get nan_mask
         if not refit:
-            Z, Y = self._unpack_panel_XY(P)
+            Z, Y, nan_mask = self._unpack_panel_XY(P)
 
         if self.UsePreSpecFactors:
             if np.size(PSF, axis=0) == self.n_factors:
@@ -124,9 +124,12 @@ class IPCARegressor:
 
         # Run IPCA
         if not refit:
-            Gamma, Factors = self._fit_ipca(Z=Z, Y=Y, PSF=PSF, refit=False)
+            Gamma, Factors = self._fit_ipca(Z=Z, Y=Y, PSF=PSF,
+                                            nan_mask=nan_mask, refit=False)
         else:
-            Gamma, Factors = self._fit_ipca(Z=self.Z, Y=self.Y, PSF=PSF, refit=True)
+            Gamma, Factors = self._fit_ipca(Z=self.Z, Y=self.Y,
+                                            nan_mask=self.nan_mask,
+                                            PSF=PSF, refit=True)
 
         # Store estimates
         self.Gamma_Est = Gamma
@@ -151,6 +154,7 @@ class IPCARegressor:
         if not refit:
             self.Z = Z
             self.Y = Y
+            self.nan_mask = nan_mask
 
         return Gamma, Factors
 
@@ -250,6 +254,7 @@ class IPCARegressor:
         n_obs = np.size(P, axis=0)
         Ypred = np.full((n_obs), np.nan)
 
+        # Unpack the panel into Z, Y
         Z = P[:, 3:]
         Y = P[:, 2]
 
@@ -269,7 +274,7 @@ class IPCARegressor:
                         .dot(Factor_OOS)
         return Ypred
 
-    def _fit_ipca(self, Z=None, Y=None, PSF=None, refit=False):
+    def _fit_ipca(self, Z=None, Y=None, nan_mask=None, PSF=None, refit=False):
         """
         Fits the regressor to the data using an alternating least squares
         scheme.
@@ -280,6 +285,10 @@ class IPCARegressor:
             i.e. characteristics
 
         Y : array_like of shape (n_samples,n_time), i.e dependent variables
+
+        nan_mask : array, boolean
+            The value at nan_mask[n,t] is True if no nan values are contained
+            in Z[n,:,t] or Y[n,t] and False otherwise.
 
         PSF : optional, array-like of shape (n_PSF, n_time), i.e.
             pre-specified factors
@@ -332,12 +341,6 @@ class IPCARegressor:
         else:
             n_factors = self.n_factors
 
-        # Check whether elements are missing
-        if not refit:
-            nan_mask = self._nan_check(Z, Y)
-        else:
-            nan_mask = self.nan_mask
-            
         # Define characteristics weighted matrices
         X = np.full((n_characts, n_time), np.nan)
         for t in range(n_time):
@@ -384,9 +387,6 @@ class IPCARegressor:
             print('Step', iter, '- Aggregate Update:', tol_current)
         print('-- Convergence Reached --')
 
-        # Store nan_mask
-        self.nan_mask = nan_mask
-
         return Gamma_New, Factor_New
 
     def _ALS_fit(self, Gamma_Old, W, X, nan_mask, **kwargs):
@@ -402,7 +402,6 @@ class IPCARegressor:
         if self.UsePreSpecFactors:
             PSF = kwargs.get("PSF")
             K_PSF, T_PSF = np.shape(PSF)
-
 
         # Determine number of factors to be estimated
         T = np.size(nan_mask, axis=1)
@@ -494,42 +493,6 @@ class IPCARegressor:
 
         return Gamma_New, F_New
 
-    def _nan_check(self, Z, Y):
-        """This function checks whether an element in the pair of
-        Z[n,:,t] and Y[n,t] is missing and returns a matrix of dimension
-        (n_samples, n_time) containing boolean values. The output is False
-        whenever there is a missing value in the pair and true otherwise
-
-        Parameters
-        ----------
-
-        Z: array-like of shape (n_samples,n_characts,n_time)
-
-        Y: array_like of shape (n_samples,n_time)
-        ----------
-        """
-        n_time = np.size(Z, axis=2)
-        n_samples = np.size(Z, axis=0)
-        # Handle missing observations
-        Z_nan = np.isnan(Z)
-        Y_nan = np.isnan(Y)
-        nan_mask = np.full((n_samples, n_time), False, dtype=bool)
-        # ProgressBar
-        bar = progressbar.ProgressBar(maxval=n_samples,
-                                      widgets=[progressbar.Bar('=', '[', ']'),
-                                               ' ', progressbar.Percentage()])
-        print("Obtaining NaN Locations...")
-        bar.start()
-        for n in range(n_samples):
-            for t in range(n_time):
-                    nan_mask[n, t] = ~np.any(Z_nan[n, :, t]) \
-                        and ~np.any(Y_nan[n, t])
-            bar.update(n)
-        bar.finish()
-        print("Done!")
-
-        return np.array(nan_mask, dtype=bool)
-
     def _unpack_panel_XY(self, P):
         """ Converts a stacked panel of data where each row corresponds to an
         observation (i, t) into a tensor of dimensions (N, L, T) where N is the
@@ -589,6 +552,8 @@ class IPCARegressor:
         # stacked vertically
         P = P[np.lexsort((P[:, 1], P[:, 0])), :]
         Y = np.reshape(P[:, 2], (N, T))
+        nan_mask = ~np.any(np.isnan(P), axis=1)
+        nan_mask = np.reshape(nan_mask, (N, T))
         # Reshape the panel into P (N, L, T) and Y(N, T)
         P = np.dstack(np.split(P[:, 3:], N, axis=0))
         P = np.swapaxes(P, 0, 2)
@@ -596,4 +561,4 @@ class IPCARegressor:
         self.ids = ids
         self.dates = dates
 
-        return P, Y
+        return P, Y, nan_mask
