@@ -3,6 +3,7 @@ import progressbar
 import warnings
 from numba import jit
 
+
 class IPCARegressor:
     """
     This class implements the IPCA algorithm by Kelly, Pruitt, Su (2017).
@@ -545,6 +546,8 @@ class IPCARegressor:
             temp.append(temp_n)
             bar.update(n_i)
         bar.finish()
+
+
 
         # Append the missing observations to create balanced panel
         if len(temp) > 0:

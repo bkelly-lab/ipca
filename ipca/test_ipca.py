@@ -26,7 +26,6 @@ data.firm = data.firm.apply(lambda x: ID[x])
 data = data[['firm', 'year', 'invest', 'value', 'capital']]
 # Convert to numpy
 data = data.to_numpy()
-data = np.genfromtxt('../../../TESTDATA/foo.csv', delimiter=',')
 PSF = np.random.randn(len(np.unique(data[:, 1])), 1)
 PSF = PSF.reshape((1, -1))
 
