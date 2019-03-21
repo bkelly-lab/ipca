@@ -1,7 +1,6 @@
 import numpy as np
 import progressbar
 import warnings
-from numba import jit
 
 
 class IPCARegressor:
@@ -99,6 +98,9 @@ class IPCARegressor:
 
         if P is None:
             raise ValueError('Must pass panel data.')
+        else:
+            # remove panel rows containing missing obs
+            P = P[~np.any(np.isnan(P), axis=1)]
 
         if self.intercept and (self.n_factors == np.size(P, axis=1)-3):
             raise ValueError("""Number of factors + intercept higher than
@@ -107,13 +109,13 @@ class IPCARegressor:
 
         # Handle pre-specified factors
         if PSF is not None:
+            if np.size(PSF, axis=1) != np.size(np.unique(P[:, 1])):
+                raise ValueError("""Number of PSF observations must match
+                                 number of unique dates in panel P""")
             self.UsePreSpecFactors = True
+
         else:
             self.UsePreSpecFactors = False
-
-        # Unpack the Panel and get nan_mask
-        if not refit:
-            Z, Y, nan_mask = self._unpack_panel_XY(P)
 
         if self.UsePreSpecFactors:
             if np.size(PSF, axis=0) == self.n_factors:
@@ -123,15 +125,18 @@ class IPCARegressor:
                               "will be estimated. To estimate additional "
                               "factors increase n_factors.")
 
+        # Unpack the Panel
+        if not refit:
+            X, W, val_obs = self._unpack_panel(P)
+
         # Run IPCA
         if not refit:
-            Gamma, Factors = self._fit_ipca(Z=Z, Y=Y, PSF=PSF,
-                                            nan_mask=nan_mask, refit=False)
+            Gamma, Factors = self._fit_ipca(X=X, W=W, PSF=PSF,
+                                            val_obs=val_obs, refit=False)
         else:
-            Gamma, Factors = self._fit_ipca(Z=self.Z, Y=self.Y,
-                                            nan_mask=self.nan_mask,
+            Gamma, Factors = self._fit_ipca(X=self.X, W=self.W,
+                                            val_obs=self.val_obs,
                                             PSF=PSF, refit=True)
-
 
         if self.UsePreSpecFactors:
             if self.intercept and PSF is not None:
@@ -154,9 +159,9 @@ class IPCARegressor:
 
         # Save Panel for Re-fitting
         if not refit:
-            self.Z = Z
-            self.Y = Y
-            self.nan_mask = nan_mask
+            self.X = X
+            self.W = W
+            self.val_obs = val_obs
 
         return self.Gamma_Est, self.Factors_Est
 
@@ -252,7 +257,7 @@ class IPCARegressor:
         if P is None:
             raise ValueError('A panel of characteristics data must be provided.')
 
-        if len(np.unique(P[:,1])) > 1:
+        if len(np.unique(P[:, 1])) > 1:
             raise ValueError('The panel must only have a single timestamp.')
 
         n_obs = np.size(P, axis=0)
@@ -267,28 +272,28 @@ class IPCARegressor:
         Denom = self.Gamma_Est.T.dot(Z.T).dot(Z).dot(self.Gamma_Est)
         Factor_OOS = np.linalg.solve(Denom, Numer.reshape((-1, 1)))
         for i in range(n_obs):
-            if np.any(np.isnan(P[i,:])):
+            if np.any(np.isnan(P[i, :])):
                 Ypred[i] = np.nan
             else:
                 if mean_factor:
-                    Ypred[i] = Z[i,:].dot(self.Gamma_Est)\
+                    Ypred[i] = Z[i, :].dot(self.Gamma_Est)\
                         .dot(np.mean(self.Factors_Est, axis=1).reshape((-1, 1)))
                 else:
-                    Ypred[i] = Z[i,:].dot(self.Gamma_Est)\
+                    Ypred[i] = Z[i, :].dot(self.Gamma_Est)\
                         .dot(Factor_OOS)
         return Ypred
 
-    def _fit_ipca(self, Z=None, Y=None, nan_mask=None, PSF=None, refit=False):
+    def _fit_ipca(self, X=None, W=None, val_obs=None, PSF=None, refit=False):
         """
         Fits the regressor to the data using an alternating least squares
         scheme.
 
         Parameters
         ----------
-        Z : array-like of shape (n_samples,n_characts,n_time),
-            i.e. characteristics
+        X : array-like of shape (n_characts,n_time),
+            i.e. characteristics weighted portfolios
 
-        Y : array_like of shape (n_samples,n_time), i.e dependent variables
+        W : array_like of shape (n_characts, n_characts,n_time),
 
         nan_mask : array, boolean
             The value at nan_mask[n,t] is True if no nan values are contained
@@ -316,22 +321,9 @@ class IPCARegressor:
             specified ones.
         """
 
-        if np.size(Z, axis=0) != np.size(Y, axis=0):
-            raise ValueError('Number of entities in Z and Y' +
-                             'must be identical.')
-        if np.size(Y, axis=1) != np.size(Z, axis=2):
-            raise ValueError('Number of samples in Z and Y must be identical.')
-        if np.size(Z, axis=1) < self.n_factors:
-            raise ValueError('Number of factors exceeds number' +
-                             'of characteristics.')
-        if PSF is not None:
-            if np.size(PSF, 1) != np.size(Y, axis=1):
-                raise ValueError('Number of samples in PSF' +
-                                 'does not match Z or Y')
-
         # Establish dimensions
-        n_time = np.size(Z, axis=2)
-        n_characts = np.size(Z, axis=1)
+        n_time = np.size(X, axis=1)
+        # n_characts = np.size(X, axis=0)
         # n_samples = np.size(Z, axis=0)
 
         # Handle intercept, effectively treating it as a prespecified factor
@@ -345,19 +337,6 @@ class IPCARegressor:
         else:
             n_factors = self.n_factors
 
-        # Define characteristics weighted matrices
-        X = np.full((n_characts, n_time), np.nan)
-        for t in range(n_time):
-            X[:, t] = np.transpose(Z[nan_mask[:, t], :, t])\
-                                   .dot(Y[nan_mask[:, t], t])\
-                                   / np.sum(nan_mask[:, t])
-        # Define W matrix
-        W = np.full((n_characts, n_characts, n_time), np.nan)
-        for t in range(n_time):
-            W[:, :, t] = np.transpose(Z[nan_mask[:, t], :, t])\
-                                      .dot(Z[nan_mask[:, t], :, t])\
-                                      / np.sum(nan_mask[:, t])
-
         # Initialize the Alternating Least Squares Procedure
         Gamma_Old, s, v = np.linalg.svd(X)
         Gamma_Old = Gamma_Old[:, :n_factors]
@@ -368,17 +347,18 @@ class IPCARegressor:
 
         # Estimation Step
         tol_current = 1
+
         iter = 0
         while((iter <= self.max_iter) and (tol_current > self.iter_tol)):
 
             if self.UsePreSpecFactors:
                 Gamma_New, Factor_New = self._ALS_fit(Gamma_Old, W, X,
-                                                      nan_mask, PSF=PSF)
+                                                      val_obs, PSF=PSF)
                 tol_current = np.amax(Gamma_New.reshape((-1, 1))
                                       - Gamma_Old.reshape((-1, 1)))
             else:
                 Gamma_New, Factor_New = self._ALS_fit(Gamma_Old, W, X,
-                                                      nan_mask)
+                                                      val_obs)
                 tol_current = np.amax(np.vstack((Gamma_New.reshape((-1, 1))
                                       - Gamma_Old.reshape((-1, 1)),
                                       Factor_New.reshape((-1, 1))
@@ -393,7 +373,7 @@ class IPCARegressor:
 
         return Gamma_New, Factor_New
 
-    def _ALS_fit(self, Gamma_Old, W, X, nan_mask, **kwargs):
+    def _ALS_fit(self, Gamma_Old, W, X, val_obs, **kwargs):
         """The alternating least squares procedure switches back and forth
         between evaluating the first order conditions for Gamma_Beta, and the
         factors until convergence is reached. This function carries out one
@@ -408,7 +388,7 @@ class IPCARegressor:
             K_PSF, T_PSF = np.shape(PSF)
 
         # Determine number of factors to be estimated
-        T = np.size(nan_mask, axis=1)
+        T = np.size(val_obs)
         if self.UsePreSpecFactors:
             L, Ktilde = np.shape(Gamma_Old)
             K = Ktilde - K_PSF
@@ -428,14 +408,14 @@ class IPCARegressor:
                     m2 = Gamma_Old[:, :K].T.dot(X[:, t])-Gamma_Old[:, :K].T\
                         .dot(W[:, :, t]).dot(Gamma_Old[:, K:Ktilde])\
                         .dot(PSF[:, t])
-                    F_New[:, t] = np.squeeze(self._numba_solve(
+                    F_New[:, t] = np.squeeze(np.linalg.solve(
                                                     m1, m2.reshape((-1, 1))))
             else:
                 F_New = np.full((K, T), np.nan)
                 for t in range(T):
                     m1 = Gamma_Old.T.dot(W[:, :, t]).dot(Gamma_Old)
                     m2 = Gamma_Old.T.dot(X[:, t])
-                    F_New[:, t] = np.squeeze(self._numba_solve(
+                    F_New[:, t] = np.squeeze(np.linalg.solve(
                                                     m1, m2.reshape((-1, 1))))
         else:
             F_New = np.full((K, T), np.nan)
@@ -451,42 +431,42 @@ class IPCARegressor:
                                             np.vstack(
                                             (F_New[:, t].reshape((-1, 1)),
                                              PSF[:, t].reshape((-1, 1)))))\
-                                             * np.sum(nan_mask[:, t])
+                                             * val_obs[t]
                     Denom_temp = np.vstack((F_New[:, t].reshape((-1, 1)),
                                            PSF[:, t].reshape(-1, 1)))
                     Denom_temp = Denom_temp.dot(Denom_temp.T) \
-                        * np.sum(nan_mask[:, t])
+                        * val_obs[t]
                     Denom = Denom + np.kron(W[:, :, t], Denom_temp)
             else:
                 for t in range(T):
                     Numer = Numer + np.kron(X[:, t].reshape((-1, 1)),
                                             PSF[:, t].reshape((-1, 1)))\
-                                            * np.sum(nan_mask[:, t])
+                                            * val_obs[t]
                     Denom = Denom + np.kron(W[:, :, t],
                                             PSF[:, t].reshape((-1, 1))
                                             .dot(PSF[:, t].reshape((-1, 1)).T))\
-                        * np.sum(nan_mask[:, t])
+                        * val_obs[t]
         else:
             for t in range(T):
                 Numer = Numer + np.kron(X[:, t].reshape((-1, 1)),
                                         F_New[:, t].reshape((-1, 1)))\
-                                        * np.sum(nan_mask[:, t])
+                                        * val_obs[t]
                 Denom = Denom + np.kron(W[:, :, t],
                                         F_New[:, t].reshape((-1, 1))
                                         .dot(F_New[:, t].reshape((1, -1)))) \
-                    * np.sum(nan_mask[:, t])
+                    * val_obs[t]
 
-        Gamma_New_trans_vec = self._numba_solve(Denom, Numer)
+        Gamma_New_trans_vec = np.linalg.solve(Denom, Numer)
         Gamma_New = Gamma_New_trans_vec.reshape((L, Ktilde))
 
         # Enforce Orthogonality of Gamma_Beta and factors F
         if K > 0:
-            R1 = self._numba_cholesky(Gamma_New[:, :K].T.dot(Gamma_New[:, :K])).T
-            R2, _, _ = self._numba_svd(R1.dot(F_New).dot(F_New.T).dot(R1.T))
-            Gamma_New[:, :K] = self._numba_lstsq(Gamma_New[:, :K].T,
-                                                 R1.T)[0]\
+            R1 = np.linalg.cholesky(Gamma_New[:, :K].T.dot(Gamma_New[:, :K])).T
+            R2, _, _ = np.linalg.svd(R1.dot(F_New).dot(F_New.T).dot(R1.T))
+            Gamma_New[:, :K] = np.linalg.lstsq(Gamma_New[:, :K].T,
+                                                 R1.T, rcond=None)[0]\
                 .dot(R2)
-            F_New = self._numba_solve(R2, R1.dot(F_New))
+            F_New = np.linalg.solve(R2, R1.dot(F_New))
 
         # Enforce sign convention for Gamma_Beta and F_New
         if K > 0:
@@ -532,31 +512,25 @@ class IPCARegressor:
         bar = progressbar.ProgressBar(maxval=N,
                                       widgets=[progressbar.Bar('=', '[', ']'),
                                                ' ', progressbar.Percentage()])
-        print("Unpacking Panel...")
+
         bar.start()
         temp = []
         for n_i, n in enumerate(ids):
-            ixd = np.invert(np.isin(dates, P[P[:, 0] == n, 1]))
+            ixd = np.isin(dates, P[P[:, 0] == 1, 1])
             temp_n = np.full((T, L+3), np.nan)
             temp_n[:, 0] = n
             temp_n[:, 1] = dates
-            temp_n = temp_n[ixd, :]
+            temp_n[ixd, :] = P[P[:, 0] == n, :]
             if np.size(temp_n, axis=0) == 0:
                 continue
             temp.append(temp_n)
             bar.update(n_i)
         bar.finish()
 
-
-
         # Append the missing observations to create balanced panel
         if len(temp) > 0:
-            temp = np.concatenate(temp, axis=0)
-            P = np.append(P, temp, axis=0)
+            P = np.concatenate(temp, axis=0)
         temp = []
-        # Sort observations such that T observations for each n in N are
-        # stacked vertically
-        P = P[np.lexsort((P[:, 1], P[:, 0])), :]
         Y = np.reshape(P[:, 2], (N, T))
         nan_mask = ~np.any(np.isnan(P), axis=1)
         nan_mask = np.reshape(nan_mask, (N, T))
@@ -566,25 +540,63 @@ class IPCARegressor:
 
         self.ids = ids
         self.dates = dates
-
+        print("Done!")
         return P, Y, nan_mask
 
-    @staticmethod
-    @jit(nopython=True)
-    def _numba_solve(m1, m2):
-        return np.linalg.solve(m1, m2)
+    def _unpack_panel(self, P):
+        """ Converts a stacked panel of data where each row corresponds to an
+        observation (i, t) into a tensor of dimensions (N, L, T) where N is the
+        number of unique entities, L is the number of characteristics and T is
+        the number of unique dates
 
-    @staticmethod
-    @jit(nopython=True)
-    def _numba_lstsq(m1, m2):
-        return np.linalg.lstsq(m1, m2)
+        Parameters
+        ----------
 
-    @staticmethod
-    @jit(nopython=True)
-    def _numba_cholesky(m1):
-        return np.linalg.cholesky(m1)
+        P: Panel of data. Each row corresponds to an observation (i, t). The
+            columns are ordered in the following manner:
+                COLUMN 1: entity id (i)
+                COLUMN 2: time index (t)
+                COLUMN 3: depdent variable Y(i,t)
+                COLUMN 4 and following: L characteristics
 
-    @staticmethod
-    @jit(nopython=True)
-    def _numba_svd(m1):
-        return np.linalg.svd(m1)
+        Returns
+        -------
+        X: array-like
+            matrix of dimensions (L, T), containing the characteristics
+            weighted portfolios
+
+        W: array-like
+            matrix of dimension (L, L, T)
+
+        val_obs: array-like
+            matrix of dimension (T), containting the number of non missing
+            observations at each point in time
+        """
+
+        dates = np.unique(P[:, 1])
+        ids = np.unique(P[:, 0])
+        T = np.size(dates, axis=0)
+        N = np.size(ids, axis=0)
+        L = np.size(P, axis=1) - 3
+        print('The panel dimensions are:')
+        print('n_samples:', N, ', n_characts:', L, ', n_time:', T)
+
+        bar = progressbar.ProgressBar(maxval=T,
+                                      widgets=[progressbar.Bar('=', '[', ']'),
+                                               ' ', progressbar.Percentage()])
+        bar.start()
+        X = np.full((L, T), np.nan)
+        W = np.full((L, L, T), np.nan)
+        val_obs = np.full((T), np.nan)
+        for t_i, t in enumerate(dates):
+            ixt = (P[:, 1] == t)
+            val_obs[t_i] = np.sum(ixt)
+            # Define characteristics weighted matrices
+            X[:, t_i] = np.transpose(P[ixt, 3:]).dot(P[ixt, 2])/val_obs[t_i]
+            W[:, :, t_i] = np.transpose(P[ixt, 3:]).dot(P[ixt, 3:])/val_obs[t_i]
+            bar.update(t_i)
+        bar.finish()
+
+        self.ids = ids
+        self.dates = dates
+        return X, W, val_obs

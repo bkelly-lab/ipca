@@ -10,6 +10,6 @@ setup(name='ipca',
       keywords=['ipca', 'regression', 'IV', 'instrumental variable'],
       packages=['ipca'],
       install_requires=[
-          'numpy','progressbar','numba','warnings'
+          'numpy','progressbar','numba'
       ],
       zip_safe=False)

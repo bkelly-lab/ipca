@@ -3,6 +3,7 @@ import numpy as np
 from sklearn.utils.testing import assert_raises
 from statsmodels.datasets import grunfeld
 
+
 from ipca import IPCARegressor
 
 
@@ -30,14 +31,16 @@ PSF = np.random.randn(len(np.unique(data[:, 1])), 1)
 PSF = PSF.reshape((1, -1))
 
 # Fit IPCARegressor
-regr = IPCARegressor(n_factors=1, intercept=True)
+regr = IPCARegressor(n_factors=1, intercept=False)
 Gamma_New, Factor_New = regr.fit(P=data)
 # Obtain Goodness of fit
 print('R2total', regr.r2_total)
 print('R2pred', regr.r2_pred)
 print(Gamma_New)
 print(Factor_New)
-regr = IPCARegressor(n_factors=1, intercept=False)
+
+# Fit IPCARegressor with intercept
+regr = IPCARegressor(n_factors=1, intercept=True)
 Gamma_New, Factor_New = regr.fit(P=data)
 # Obtain Goodness of fit
 print('R2total', regr.r2_total)
@@ -48,7 +51,6 @@ print(Factor_New)
 # Use the fitted regressor to predict
 data_x = np.delete(data, 2, axis=1)
 Ypred = regr.predict(P=data_x)
-
 
 # Test refitting the IPCARegressor with previous data but different n_factors
 regr.n_factors = 2
