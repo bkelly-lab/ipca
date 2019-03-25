@@ -1,7 +1,9 @@
 import numpy as np
+import scipy as sp
 import progressbar
 import warnings
-
+from numba import jit
+import time
 
 class IPCARegressor:
     """
@@ -95,17 +97,23 @@ class IPCARegressor:
             top of the pre-specified ones.
 
         """
+        # Check re-fitting is valied
+        if refit:
+            try:
+                self.X
+            except AttributeError:
+                raise ValueError('Refit only possible after initial fit.')
 
+        # Handel paenl
         if P is None:
             raise ValueError('Must pass panel data.')
         else:
             # remove panel rows containing missing obs
             P = P[~np.any(np.isnan(P), axis=1)]
 
-        if self.intercept and (self.n_factors == np.size(P, axis=1)-3):
-            raise ValueError("""Number of factors + intercept higher than
-                                number of characteristics. Reduce number of
-                                factors or set intercept to false.""")
+        # Unpack the Panel
+        if not refit:
+            X, W, val_obs = self._unpack_panel(P)
 
         # Handle pre-specified factors
         if PSF is not None:
@@ -113,7 +121,6 @@ class IPCARegressor:
                 raise ValueError("""Number of PSF observations must match
                                  number of unique dates in panel P""")
             self.UsePreSpecFactors = True
-
         else:
             self.UsePreSpecFactors = False
 
@@ -125,43 +132,66 @@ class IPCARegressor:
                               "will be estimated. To estimate additional "
                               "factors increase n_factors.")
 
-        # Unpack the Panel
-        if not refit:
-            X, W, val_obs = self._unpack_panel(P)
+        # Handle intercept
+        if self.intercept and (self.n_factors == np.size(P, axis=1)-3):
+            raise ValueError("""Number of factors + intercept higher than
+                                number of characteristics. Reduce number of
+                                factors or set intercept to false.""")
+
+        #  Treating intercept it as a prespecified factor
+        if self.intercept:
+            self.n_factors_eff = self.n_factors + 1
+            if PSF is not None:
+                PSF = np.concatenate((PSF, np.ones((1, self.T))), axis=0)
+            elif PSF is None:
+                PSF = np.ones((1, self.T))
+        else:
+            self.n_factors_eff = self.n_factors
+
+        # Check enough features provided
+        if np.size(P, axis=1) - 3 < self.n_factors_eff:
+            raise ValueError('The number of factors requested exceeds number of features')
+
+        # Determine fit case - if intercept or PSF or both use PSFcase fitting
+        # Note PSFcase in contrast to UsePreSpecFactors is only indicating
+        # that the IPCA fitting is carried out as if PSF were passed even if
+        # only an intercept was passed.
+        if self.UsePreSpecFactors or self.intercept:
+            self.PSFcase = True
+        else:
+            self.PSFcase = False
 
         # Run IPCA
         if not refit:
             Gamma, Factors = self._fit_ipca(X=X, W=W, PSF=PSF,
-                                            val_obs=val_obs, refit=False)
+                                            val_obs=val_obs)
         else:
-            Gamma, Factors = self._fit_ipca(X=self.X, W=self.W,
-                                            val_obs=self.val_obs,
-                                            PSF=PSF, refit=True)
-
-        if self.UsePreSpecFactors:
-            if self.intercept and PSF is not None:
-                PSF = np.concatenate((PSF, np.ones((1, len(self.dates)))), axis=0)
-            else:
-                PSF = np.ones((1, len(self.dates)))
-        if self.UsePreSpecFactors:
-            Factors = np.concatenate((Factors, PSF), axis=0)
+            Gamma, Factors = self._fit_ipca(X=self.X, W=self.W, PSF=PSF,
+                                            val_obs=self.val_obs)
 
         # Store estimates
+        if self.PSFcase:
+            if self.intercept and self.UsePreSpecFactors:
+                PSF = np.concatenate((PSF, np.ones((1, len(self.dates)))), axis=0)
+            elif self.intercept:
+                PSF = np.ones((1, len(self.dates)))
+
+            Factors = np.concatenate((Factors, PSF), axis=0)
+
         self.Gamma_Est = Gamma
         self.Factors_Est = Factors
 
-        # Compute goodness of fit measures
-        Ytrue = P[:, 2]
-        Ypred = self.predict(np.delete(P, 2, axis=1), mean_factor=False)
-        self.r2_total = 1-np.nansum((Ypred-Ytrue)**2)/np.nansum(Ytrue**2)
-        Ypred = self.predict(np.delete(P, 2, axis=1), mean_factor=True)
-        self.r2_pred = 1-np.nansum((Ypred-Ytrue)**2)/np.nansum(Ytrue**2)
 
-        # Save Panel for Re-fitting
+        # Save unpacked panel for Re-fitting
         if not refit:
+            self.PSF = PSF
             self.X = X
             self.W = W
             self.val_obs = val_obs
+
+        # Compute Goodness of Fit
+        self.r2_total, self.r2_pred, self.r2_total_x, self.r2_pred_x = \
+            self._R2_comps(P=P)
 
         return self.Gamma_Est, self.Factors_Est
 
@@ -201,22 +231,76 @@ class IPCARegressor:
         if P is None:
             raise ValueError('A panel of characteristics data must be provided.')
 
+        if np.any(np.isnan(P)):
+            raise ValueError('Cannot contain missing observations / nan values.')
         n_obs = np.size(P, axis=0)
         Ypred = np.full((n_obs), np.nan)
 
         mean_Factors_Est = np.mean(self.Factors_Est, axis=1).reshape((-1, 1))
 
-        for i in range(n_obs):
-            if np.any(np.isnan(P[i, :])):
-                Ypred[i] = np.nan
-            else:
-                if mean_factor:
-                    Ypred[i] = P[i, 2:].dot(self.Gamma_Est)\
-                        .dot(mean_Factors_Est)
-                else:
-                    Ypred[i] = P[i, 2:].dot(self.Gamma_Est)\
-                        .dot(self.Factors_Est[:, self.dates == P[i, 1]])
+        if mean_factor:
+            Ypred[:] = np.squeeze(P[:, 2:].dot(self.Gamma_Est)\
+                .dot(mean_Factors_Est))
+        else:
+
+            for t_i, t in enumerate(self.dates):
+                ix = (P[:, 1] == t)
+                Ypred[ix] = np.squeeze(P[ix, 2:].dot(self.Gamma_Est)\
+                    .dot(self.Factors_Est[:, t_i]))
         return Ypred
+
+    def BS_Walpha(self, ndraws=1000):
+        """
+        Bootstrap inference on the hypotheses Gamma_alpha = 0
+
+        Parameters
+        ----------
+
+        ndraws  : integer, default=1000
+            Number of bootstrap draws and re-estiamtions to be performed
+
+        """
+
+        if not self.intercept:
+            raise ValueError('Need to fit model with intercept first.')
+
+        # Compute Walpha
+        Walpha = self.Gamma_Est[-1, :].T.dot(self.Gamma_Est[-1, :])
+
+        # Compute residuals
+        d = np.full((self.L, self.T), np.nan)
+        for t_i, t in enumerate(self.dates):
+            d[:, t_i] = self.W[:, :, t_i].dot(self.Gamma_Est)\
+                .dot(self.Factors_Est[:, t_i])
+
+        bar = progressbar.ProgressBar(maxval=ndraws,
+                                      widgets=[progressbar.Bar('=', '[', ']'),
+                                               ' ', progressbar.Percentage()])
+        # Generate Bootstrap Sample & Re-estimate
+        Walpha_b = np.full((ndraws), np.nan)
+
+        print("Starting Bootstrap...")
+        bar.start()
+        for n in range(ndraws):
+            X_b = np.full((self.L, self.T), np.nan)
+            for t in range(self.T):
+                d_temp = np.random.standard_t(5)*d[:, np.random.randint(0, high=self.T)]
+                X_b[:, t] = self.W[:, :, t].dot(self.Gamma_Est[:, :-1])\
+                    .dot(self.Factors_Est[:-1, t]) + d_temp
+
+            # Re-estimate unrestricted model
+            Gamma, Factors = self._fit_ipca(X=X_b, W=self.W, PSF=self.PSF,
+                                            val_obs=self.val_obs, quiet=True)
+
+            # Compute and store Walpha_b
+            Walpha_b[n] = Gamma[-1, :].T.dot(Gamma[-1, :])
+            bar.update(n)
+        bar.finish()
+        print("Done!")
+        print(Walpha_b, Walpha)
+        pval = np.sum(Walpha_b > Walpha)/ndraws
+
+        return pval
 
     def predictOOS(self, P=None, mean_factor=False):
         """
@@ -271,19 +355,16 @@ class IPCARegressor:
         Numer = self.Gamma_Est.T.dot(Z.T).dot(Y)
         Denom = self.Gamma_Est.T.dot(Z.T).dot(Z).dot(self.Gamma_Est)
         Factor_OOS = np.linalg.solve(Denom, Numer.reshape((-1, 1)))
-        for i in range(n_obs):
-            if np.any(np.isnan(P[i, :])):
-                Ypred[i] = np.nan
-            else:
-                if mean_factor:
-                    Ypred[i] = Z[i, :].dot(self.Gamma_Est)\
-                        .dot(np.mean(self.Factors_Est, axis=1).reshape((-1, 1)))
-                else:
-                    Ypred[i] = Z[i, :].dot(self.Gamma_Est)\
-                        .dot(Factor_OOS)
+
+        if mean_factor:
+            Ypred = np.squeeze(Z.dot(self.Gamma_Est)\
+                    .dot(np.mean(self.Factors_Est, axis=1).reshape((-1, 1))))
+        else:
+            Ypred = np.diag(Z.dot(self.Gamma_Est).dot(Factor_OOS))
+
         return Ypred
 
-    def _fit_ipca(self, X=None, W=None, val_obs=None, PSF=None, refit=False):
+    def _fit_ipca(self, X=None, W=None, val_obs=None, PSF=None, quiet=False):
         """
         Fits the regressor to the data using an alternating least squares
         scheme.
@@ -302,8 +383,8 @@ class IPCARegressor:
         PSF : optional, array-like of shape (n_PSF, n_time), i.e.
             pre-specified factors
 
-        refit : optional, boolean
-            determines whether previously fitted regressor is used
+        quiet   : optional, bool
+            If true no text output will be produced
 
 
         Returns
@@ -321,57 +402,49 @@ class IPCARegressor:
             specified ones.
         """
 
-        # Establish dimensions
-        n_time = np.size(X, axis=1)
-        # n_characts = np.size(X, axis=0)
-        # n_samples = np.size(Z, axis=0)
-
-        # Handle intercept, effectively treating it as a prespecified factor
-        if self.intercept:
-            n_factors = self.n_factors + 1
-            if PSF is not None:
-                PSF = np.concatenate((PSF, np.ones((1, n_time))), axis=0)
-            elif PSF is None:
-                self.UsePreSpecFactors = True
-                PSF = np.ones((1, n_time))
-        else:
-            n_factors = self.n_factors
-
         # Initialize the Alternating Least Squares Procedure
         Gamma_Old, s, v = np.linalg.svd(X)
-        Gamma_Old = Gamma_Old[:, :n_factors]
-        s = s[:n_factors]
+        Gamma_Old = Gamma_Old[:, :self.n_factors_eff]
+        s = s[:self.n_factors_eff]
         v = v.T
-        v = v[:, :n_factors]
+        v = v[:, :self.n_factors_eff]
         Factor_Old = np.diag(s).dot(v.T)
 
         # Estimation Step
         tol_current = 1
 
         iter = 0
+
+
         while((iter <= self.max_iter) and (tol_current > self.iter_tol)):
 
-            if self.UsePreSpecFactors:
+            if self.PSFcase:
                 Gamma_New, Factor_New = self._ALS_fit(Gamma_Old, W, X,
                                                       val_obs, PSF=PSF)
-                tol_current = np.amax(Gamma_New.reshape((-1, 1))
-                                      - Gamma_Old.reshape((-1, 1)))
+                tol_current = np.max(np.abs(Gamma_New.reshape((-1, 1))
+                                      - Gamma_Old.reshape((-1, 1))))
             else:
                 Gamma_New, Factor_New = self._ALS_fit(Gamma_Old, W, X,
                                                       val_obs)
-                tol_current = np.amax(np.vstack((Gamma_New.reshape((-1, 1))
+                tol_current = np.max(np.abs(np.vstack((Gamma_New.reshape((-1, 1))
                                       - Gamma_Old.reshape((-1, 1)),
                                       Factor_New.reshape((-1, 1))
-                                      - Factor_Old.reshape((-1, 1)))))
+                                      - Factor_Old.reshape((-1, 1))))))
 
             # Compute update size
             Factor_Old = Factor_New
             Gamma_Old = Gamma_New
+
+
             iter += 1
-            print('Step', iter, '- Aggregate Update:', tol_current)
-        print('-- Convergence Reached --')
+            if not quiet:
+                print('Step', iter, '- Aggregate Update:', tol_current)
+
+        if not quiet:
+            print('-- Convergence Reached --')
 
         return Gamma_New, Factor_New
+
 
     def _ALS_fit(self, Gamma_Old, W, X, val_obs, **kwargs):
         """The alternating least squares procedure switches back and forth
@@ -380,19 +453,17 @@ class IPCARegressor:
         complete update procedure and will need to be called repeatedly using
         the updated Gamma's and factors as inputs.
         """
+        T = self.T
 
         # Determine whether any per-specified factors were passed
-
-        if self.UsePreSpecFactors:
+        if self.PSFcase:
             PSF = kwargs.get("PSF")
-            K_PSF, T_PSF = np.shape(PSF)
+            K_PSF, _ = np.shape(PSF)
 
         # Determine number of factors to be estimated
-        T = np.size(val_obs)
-        if self.UsePreSpecFactors:
+        if self.PSFcase:
             L, Ktilde = np.shape(Gamma_Old)
             K = Ktilde - K_PSF
-
         else:
             L, K = np.shape(Gamma_Old)
             Ktilde = K
@@ -400,7 +471,7 @@ class IPCARegressor:
         # ALS Step 1
         F_New = np.nan
         if K > 0:
-            if self.UsePreSpecFactors:
+            if self.PSFcase:
                 F_New = np.full((K, T), np.nan)
                 for t in range(T):
                     m1 = Gamma_Old[:, :K].T.dot(W[:, :, t])\
@@ -408,65 +479,65 @@ class IPCARegressor:
                     m2 = Gamma_Old[:, :K].T.dot(X[:, t])-Gamma_Old[:, :K].T\
                         .dot(W[:, :, t]).dot(Gamma_Old[:, K:Ktilde])\
                         .dot(PSF[:, t])
-                    F_New[:, t] = np.squeeze(np.linalg.solve(
+                    F_New[:, t] = np.squeeze(self._numba_solve(
                                                     m1, m2.reshape((-1, 1))))
             else:
                 F_New = np.full((K, T), np.nan)
                 for t in range(T):
                     m1 = Gamma_Old.T.dot(W[:, :, t]).dot(Gamma_Old)
                     m2 = Gamma_Old.T.dot(X[:, t])
-                    F_New[:, t] = np.squeeze(np.linalg.solve(
+                    F_New[:, t] = np.squeeze(self._numba_solve(
                                                     m1, m2.reshape((-1, 1))))
         else:
             F_New = np.full((K, T), np.nan)
 
-        # ALS Step 2
-        Numer = np.full((L*Ktilde, 1), 0)
-        Denom = np.full((L*Ktilde, L*Ktilde), 0)
 
-        if self.UsePreSpecFactors:
+        # ALS Step 2
+        Numer = self._numba_full((L*Ktilde, 1), 0.0)
+        Denom = self._numba_full((L*Ktilde, L*Ktilde), 0.0)
+        #t1 = time.time()
+        if self.PSFcase:
             if K > 0:
                 for t in range(T):
-                    Numer = Numer + np.kron(X[:, t].reshape((-1, 1)),
+                    Numer += self._numba_kron(X[:, t].reshape((-1, 1)),
                                             np.vstack(
                                             (F_New[:, t].reshape((-1, 1)),
                                              PSF[:, t].reshape((-1, 1)))))\
                                              * val_obs[t]
                     Denom_temp = np.vstack((F_New[:, t].reshape((-1, 1)),
-                                           PSF[:, t].reshape(-1, 1)))
-                    Denom_temp = Denom_temp.dot(Denom_temp.T) \
-                        * val_obs[t]
-                    Denom = Denom + np.kron(W[:, :, t], Denom_temp)
+                                           PSF[:, t].reshape((-1, 1))))
+                    Denom += self._numba_kron(W[:, :, t], Denom_temp.dot(Denom_temp.T)
+                                              * val_obs[t])
             else:
                 for t in range(T):
-                    Numer = Numer + np.kron(X[:, t].reshape((-1, 1)),
-                                            PSF[:, t].reshape((-1, 1)))\
-                                            * val_obs[t]
-                    Denom = Denom + np.kron(W[:, :, t],
-                                            PSF[:, t].reshape((-1, 1))
-                                            .dot(PSF[:, t].reshape((-1, 1)).T))\
-                        * val_obs[t]
+                    Numer += self._numba_kron(X[:, t].reshape((-1, 1)),
+                                              PSF[:, t].reshape((-1, 1)))\
+                                              * val_obs[t]
+                    Denom += self._numba_kron(W[:, :, t],
+                                              PSF[:, t].reshape((-1, 1))
+                                              .dot(PSF[:, t].T)) * val_obs[t]
         else:
             for t in range(T):
-                Numer = Numer + np.kron(X[:, t].reshape((-1, 1)),
-                                        F_New[:, t].reshape((-1, 1)))\
-                                        * val_obs[t]
-                Denom = Denom + np.kron(W[:, :, t],
-                                        F_New[:, t].reshape((-1, 1))
-                                        .dot(F_New[:, t].reshape((1, -1)))) \
-                    * val_obs[t]
 
-        Gamma_New_trans_vec = np.linalg.solve(Denom, Numer)
-        Gamma_New = Gamma_New_trans_vec.reshape((L, Ktilde))
+                Numer = Numer + self._numba_kron(X[:, t].reshape((-1, 1)),
+                                          F_New[:, t].reshape((-1, 1)))\
+                                          * val_obs[t]
+                Denom = Denom + self._numba_kron(W[:, :, t],
+                                          F_New[:, t].reshape((-1, 1))
+                                          .dot(F_New[:, t].reshape((1, -1)))) \
+                                          * val_obs[t]
+
+        Gamma_New = self._numba_solve(Denom, Numer).reshape((L, Ktilde))
+        #print('ALS2', time.time()-t1)
 
         # Enforce Orthogonality of Gamma_Beta and factors F
         if K > 0:
-            R1 = np.linalg.cholesky(Gamma_New[:, :K].T.dot(Gamma_New[:, :K])).T
-            R2, _, _ = np.linalg.svd(R1.dot(F_New).dot(F_New.T).dot(R1.T))
-            Gamma_New[:, :K] = np.linalg.lstsq(Gamma_New[:, :K].T,
-                                                 R1.T, rcond=None)[0]\
+            R1 = self._numba_chol(Gamma_New[:, :K].T.dot(Gamma_New[:, :K])).T
+            R2, _, _ = self._numba_svd(R1.dot(F_New).dot(F_New.T).dot(R1.T))
+            Gamma_New[:, :K] = self._numba_lstsq(Gamma_New[:, :K].T,
+                                                 R1.T)[0]\
                 .dot(R2)
-            F_New = np.linalg.solve(R2, R1.dot(F_New))
+            F_New = self._numba_solve(R2, R1.dot(F_New))
 
         # Enforce sign convention for Gamma_Beta and F_New
         if K > 0:
@@ -597,6 +668,102 @@ class IPCARegressor:
             bar.update(t_i)
         bar.finish()
 
+        # Store panel dimensions
         self.ids = ids
         self.dates = dates
+        self.T = T
+        self.N = N
+        self.L = L
+
         return X, W, val_obs
+
+    def _R2_comps(self, P=None):
+        """
+        Computes the goodness of fit measures both at the entity level
+        and at the managed portfolio level. Requires the estimator to be
+        fitted previously.
+
+        Parameters
+        ----------
+        P   :   Panel of stacked data. Each row corresponds to an observation
+                (i, t) where i denotes the entity index and t denotes
+                the time index. The panel may be unbalanced. The number of unique
+                entities is n_samples, the number of unique dates is n_time, and
+                the number of characteristics used as instruments is n_characts.
+                The columns of the panel are organized in the following order:
+
+                - Column 1: entity id (i)
+                - Column 2: time index (t)
+                - Column 3: dependent variable corresponding to observation (i,t)
+                - Column 4 to column 4+n_characts: characteristics.
+
+        """
+
+        # Compute goodness of fit measures, entity level
+        Ytrue = P[:, 2]
+
+        # R2 Total
+        Ypred = self.predict(np.delete(P, 2, axis=1), mean_factor=False)
+        r2_total = 1-np.nansum((Ypred-Ytrue)**2)/np.nansum(Ytrue**2)
+
+        # R2 Pred
+        Ypred = self.predict(np.delete(P, 2, axis=1), mean_factor=True)
+        r2_pred = 1-np.nansum((Ypred-Ytrue)**2)/np.nansum(Ytrue**2)
+
+        # Compute goodness of fit measures, portfolio level
+        Num_tot = 0
+        Denom_tot = 0
+        Num_pred = 0
+        Denom_pred = 0
+
+        mean_Factors_Est = np.mean(self.Factors_Est, axis=1).reshape((-1, 1))
+
+        for t_i, t in enumerate(self.dates):
+            Ytrue = self.X[:, t_i]
+            # R2 Total
+            Ypred = self.W[:, :, t_i].dot(self.Gamma_Est)\
+                .dot(self.Factors_Est[:, t_i])
+            Num_tot += np.transpose((Ytrue-Ypred)).dot((Ytrue-Ypred))
+            Denom_tot += Ytrue.T.dot(Ytrue)
+
+            # R2 Pred
+            Ypred = self.W[:, :, t_i].dot(self.Gamma_Est).dot(mean_Factors_Est)
+            Ypred = np.squeeze(Ypred)
+            Num_pred += np.transpose((Ytrue-Ypred)).dot((Ytrue-Ypred))
+            Denom_pred += Ytrue.T.dot(Ytrue)
+
+
+        r2_total_x = 1-Num_tot/Denom_tot
+        r2_pred_x = 1-Num_pred/Denom_pred
+
+        return r2_total, r2_pred, r2_total_x, r2_pred_x
+
+    @staticmethod
+    @jit(nopython=True)
+    def _numba_solve(m1, m2):
+        return np.linalg.solve(np.ascontiguousarray(m1), np.ascontiguousarray(m2))
+
+    @staticmethod
+    @jit(nopython=True)
+    def _numba_lstsq(m1, m2):
+        return np.linalg.lstsq(np.ascontiguousarray(m1), np.ascontiguousarray(m2))
+
+    @staticmethod
+    @jit(nopython=True)
+    def _numba_kron(m1, m2):
+        return np.kron(np.ascontiguousarray(m1), np.ascontiguousarray(m2))
+
+    @staticmethod
+    @jit(nopython=True)
+    def _numba_chol(m1):
+        return np.linalg.cholesky(np.ascontiguousarray(m1))
+
+    @staticmethod
+    @jit(nopython=True)
+    def _numba_svd(m1):
+        return np.linalg.svd(np.ascontiguousarray(m1))
+
+    @staticmethod
+    @jit(nopython=True)
+    def _numba_full(m1, m2):
+        return np.full(m1, m2)

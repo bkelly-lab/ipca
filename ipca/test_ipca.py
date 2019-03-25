@@ -29,24 +29,25 @@ data = data[['firm', 'year', 'invest', 'value', 'capital']]
 data = data.to_numpy()
 PSF = np.random.randn(len(np.unique(data[:, 1])), 1)
 PSF = PSF.reshape((1, -1))
-
-# Fit IPCARegressor
+#data = np.genfromtxt('../../../TESTDATA/foo.csv', delimiter=',')
+# Test IPCARegressor
 regr = IPCARegressor(n_factors=1, intercept=False)
 Gamma_New, Factor_New = regr.fit(P=data)
-# Obtain Goodness of fit
 print('R2total', regr.r2_total)
 print('R2pred', regr.r2_pred)
+print('R2total_x', regr.r2_total_x)
+print('R2pred_x', regr.r2_pred_x)
 print(Gamma_New)
 print(Factor_New)
 
-# Fit IPCARegressor with intercept
+# Test IPCARegressor with intercept
 regr = IPCARegressor(n_factors=1, intercept=True)
 Gamma_New, Factor_New = regr.fit(P=data)
-# Obtain Goodness of fit
 print('R2total', regr.r2_total)
 print('R2pred', regr.r2_pred)
-print(Gamma_New)
-print(Factor_New)
+print('R2total_x', regr.r2_total_x)
+print('R2pred_x', regr.r2_pred_x)
+
 
 # Use the fitted regressor to predict
 data_x = np.delete(data, 2, axis=1)
@@ -56,6 +57,7 @@ Ypred = regr.predict(P=data_x)
 regr.n_factors = 2
 regr.intercept = False
 Gamma_New, Factor_New = regr.fit(P=data, refit=True)
+
 # Test refitting the IPCARegressor on new data
 data_refit = data[data[:, 1] != 1954, :]
 Gamma_New, Factor_New = regr.fit(P=data_refit, refit=False)
@@ -65,7 +67,6 @@ regr = IPCARegressor(n_factors=1, intercept=True)
 data_nan = data.copy()
 data_nan[10:30, 2:] = np.nan
 Gamma_New, Factor_New = regr.fit(P=data_nan)
-
 
 # Test missing observations
 regr = IPCARegressor(n_factors=1, intercept=True)
@@ -80,5 +81,11 @@ data_IS = data[data[:, 1] != 1954, :]
 data_OOS = data[data[:, 1] == 1954, :]
 # Re-fit the regressor
 regr.fit(P=data_IS)
-
 Ypred = regr.predictOOS(P=data_OOS, mean_factor=True)
+
+
+# Test Walpha Bootstrap
+regr = IPCARegressor(n_factors=1, intercept=True)
+Gamma_New, Factor_New = regr.fit(P=data)
+pval = regr.BS_Walpha(ndraws=100)
+print('p-value', pval)
