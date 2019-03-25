@@ -178,6 +178,20 @@ estimation is stopped</li>
 </tbody>
 </table>
 <dl class="method">
+<dt id="ipca.IPCARegressor.BS_Walpha">
+<code class="descname">BS_Walpha</code><span class="sig-paren">(</span><em>ndraws=1000</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.BS_Walpha"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.BS_Walpha" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bootstrap inference on the hypotheses Gamma_alpha = 0</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>ndraws</strong> (<em>integer, default=1000</em>) – Number of bootstrap draws and re-estiamtions to be performed</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
 <dt id="ipca.IPCARegressor.fit">
 <code class="descname">fit</code><span class="sig-paren">(</span><em>P=None</em>, <em>PSF=None</em>, <em>refit=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.fit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.fit" title="Permalink to this definition">¶</a></dt>
 <dd><p>Fits the regressor to the data using an alternating least squares
