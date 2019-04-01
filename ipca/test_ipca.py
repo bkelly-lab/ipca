@@ -29,7 +29,7 @@ data = data[['firm', 'year', 'invest', 'value', 'capital']]
 data = data.to_numpy()
 PSF = np.random.randn(len(np.unique(data[:, 1])), 1)
 PSF = PSF.reshape((1, -1))
-#data = np.genfromtxt('../../../TESTDATA/foo.csv', delimiter=',')
+
 # Test IPCARegressor
 regr = IPCARegressor(n_factors=1, intercept=False)
 Gamma_New, Factor_New = regr.fit(P=data)
