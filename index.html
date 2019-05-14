@@ -175,11 +175,14 @@ estimation is stopped</p></li>
 </dl>
 <dl class="method">
 <dt id="ipca.IPCARegressor.BS_Walpha">
-<code class="descname">BS_Walpha</code><span class="sig-paren">(</span><em>ndraws=1000</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.BS_Walpha"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.BS_Walpha" title="Permalink to this definition">¶</a></dt>
+<code class="descname">BS_Walpha</code><span class="sig-paren">(</span><em>ndraws=1000</em>, <em>n_jobs=-1</em>, <em>backend='loky'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.BS_Walpha"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.BS_Walpha" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bootstrap inference on the hypotheses Gamma_alpha = 0</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>ndraws</strong> (<em>integer, default=1000</em>) – Number of bootstrap draws and re-estiamtions to be performed</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ndraws</strong> (<em>integer, default=1000</em>) – Number of bootstrap draws and re-estiamtions to be performed</p></li>
+<li><p><strong>backend</strong> (<em>optional,</em>)</p></li>
+</ul>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p><strong>pval</strong> – P-value from the hypothesis test H0: Gamma_alpha=0</p>
