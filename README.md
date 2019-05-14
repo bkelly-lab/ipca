@@ -70,7 +70,7 @@ is possible that older versions work.
 * SciPy (1.1+)
 * Numba (0.42+)
 * progressbar (2.5+)
-
+* multiprocessing (0.13+)
 
 ### Testing
 
