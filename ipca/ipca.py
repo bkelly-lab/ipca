@@ -4,8 +4,23 @@ import progressbar
 import warnings
 from numba import jit
 import time
-import multiprocessing as mp
 from joblib import Parallel, delayed
+
+def _BS_Walpha_sub(self, n, d):
+    X_b = np.full((self.L, self.T), np.nan)
+    for t in range(self.T):
+        d_temp = np.random.standard_t(5)*d[:, np.random.randint(0, high=self.T)]
+        X_b[:, t] = self.W[:, :, t].dot(self.Gamma_Est[:, :-1])\
+            .dot(self.Factors_Est[:-1, t]) + d_temp
+
+    # Re-estimate unrestricted model
+    Gamma, Factors = self._fit_ipca(X=X_b, W=self.W, PSF=self.PSF,
+                                    val_obs=self.val_obs, quiet=True)
+
+    # Compute and store Walpha_b
+    Walpha_b = Gamma[-1, :].T.dot(Gamma[-1, :])
+
+    return Walpha_b
 
 class IPCARegressor:
     """
@@ -251,7 +266,7 @@ class IPCARegressor:
                     .dot(self.Factors_Est[:, t_i]))
         return Ypred
 
-    def BS_Walpha(self, ndraws=1000):
+    def BS_Walpha(self, ndraws=1000, n_jobs=-1, backend='loky'):
         """
         Bootstrap inference on the hypotheses Gamma_alpha = 0
 
@@ -260,6 +275,8 @@ class IPCARegressor:
 
         ndraws  : integer, default=1000
             Number of bootstrap draws and re-estiamtions to be performed
+
+        backend : optional,
 
         Returns
         -------
@@ -281,29 +298,15 @@ class IPCARegressor:
                 .dot(self.Factors_Est[:, t_i])
 
         print("Starting Bootstrap...")
-        Walpha_b = Parallel(n_jobs=-2, backend='multiprocessing', verbose=10)(
-            delayed(self._BS_Walpha_sub)(n, d) for n in range(ndraws))
+        Walpha_b = Parallel(n_jobs=n_jobs, backend=backend, verbose=10)(
+            delayed(_BS_Walpha_sub)(self, n, d) for n in range(ndraws))
         print("Done!")
 
         # print(Walpha_b, Walpha)
         pval = np.sum(Walpha_b > Walpha)/ndraws
         return pval
 
-    def _BS_Walpha_sub(self, n, d):
-        X_b = np.full((self.L, self.T), np.nan)
-        for t in range(self.T):
-            d_temp = np.random.standard_t(5)*d[:, np.random.randint(0, high=self.T)]
-            X_b[:, t] = self.W[:, :, t].dot(self.Gamma_Est[:, :-1])\
-                .dot(self.Factors_Est[:-1, t]) + d_temp
 
-        # Re-estimate unrestricted model
-        Gamma, Factors = self._fit_ipca(X=X_b, W=self.W, PSF=self.PSF,
-                                        val_obs=self.val_obs, quiet=True)
-
-        # Compute and store Walpha_b
-        Walpha_b = Gamma[-1, :].T.dot(Gamma[-1, :])
-
-        return Walpha_b
 
 
     def predictOOS(self, P=None, mean_factor=False):
