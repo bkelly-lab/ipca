@@ -70,7 +70,7 @@ is possible that older versions work.
 * SciPy (1.1+)
 * Numba (0.42+)
 * progressbar (2.5+)
-* multiprocessing (0.13+)
+* joblib (0.13+)
 
 ### Testing
 
@@ -78,6 +78,7 @@ is possible that older versions work.
 * scikit-learn (0.20+)
 * pytest (4.3+)
 * statsmodels (0.9+)
+
 ## Acknowledgements
 The implementation is inspired by the MATLAB code for IPCA made available on [Seth Pruitt's](https://sethpruitt.net/research/) website.
 

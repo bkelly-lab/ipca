@@ -5,3 +5,4 @@ statsmodels>=0.9
 progressbar >=2.5
 scikit-learn >= 0.20
 numba >= 0.42.0
+joblib >= 0.13.2
