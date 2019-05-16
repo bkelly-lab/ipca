@@ -258,9 +258,9 @@ class IPCARegressor:
         ----------
 
         ndraws  : integer, default=1000
-            Number of bootstrap draws and re-estiamtions to be performed
+            Number of bootstrap draws and re-estimations to be performed
 
-        backend : optional,
+        backend : optional
 
         Returns
         -------
@@ -403,7 +403,6 @@ class IPCARegressor:
         tol_current = 1
 
         iter = 0
-
 
         while((iter <= self.max_iter) and (tol_current > self.iter_tol)):
 
@@ -721,7 +720,6 @@ class IPCARegressor:
             Num_pred += np.transpose((Ytrue-Ypred)).dot((Ytrue-Ypred))
             Denom_pred += Ytrue.T.dot(Ytrue)
 
-
         r2_total_x = 1-Num_tot/Denom_tot
         r2_pred_x = 1-Num_pred/Denom_pred
 
@@ -760,6 +758,7 @@ class IPCARegressor:
 
 def _BS_Walpha_sub(self, n, d):
     X_b = np.full((self.L, self.T), np.nan)
+    np.random.seed(n)
     for t in range(self.T):
         d_temp = np.random.standard_t(5)*d[:, np.random.randint(0, high=self.T)]
         X_b[:, t] = self.W[:, :, t].dot(self.Gamma_Est[:, :-1])\
