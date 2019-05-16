@@ -149,22 +149,6 @@
 <span class="kn">import</span> <span class="nn">time</span>
 <span class="kn">from</span> <span class="nn">joblib</span> <span class="k">import</span> <span class="n">Parallel</span><span class="p">,</span> <span class="n">delayed</span>
 
-<span class="k">def</span> <span class="nf">_BS_Walpha_sub</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">):</span>
-    <span class="n">X_b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">L</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="p">):</span>
-        <span class="n">d_temp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">standard_t</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="o">*</span><span class="n">d</span><span class="p">[:,</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="p">)]</span>
-        <span class="n">X_b</span><span class="p">[:,</span> <span class="n">t</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">t</span><span class="p">]</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span><span class="p">[:,</span> <span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>\
-            <span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Factors_Est</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">t</span><span class="p">])</span> <span class="o">+</span> <span class="n">d_temp</span>
-
-    <span class="c1"># Re-estimate unrestricted model</span>
-    <span class="n">Gamma</span><span class="p">,</span> <span class="n">Factors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fit_ipca</span><span class="p">(</span><span class="n">X</span><span class="o">=</span><span class="n">X_b</span><span class="p">,</span> <span class="n">W</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">,</span> <span class="n">PSF</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">PSF</span><span class="p">,</span>
-                                    <span class="n">val_obs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">val_obs</span><span class="p">,</span> <span class="n">quiet</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-
-    <span class="c1"># Compute and store Walpha_b</span>
-    <span class="n">Walpha_b</span> <span class="o">=</span> <span class="n">Gamma</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">Gamma</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">:])</span>
-
-    <span class="k">return</span> <span class="n">Walpha_b</span>
-
 <div class="viewcode-block" id="IPCARegressor"><a class="viewcode-back" href="../../index.html#ipca.IPCARegressor">[docs]</a><span class="k">class</span> <span class="nc">IPCARegressor</span><span class="p">:</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    This class implements the IPCA algorithm by Kelly, Pruitt, Su (2017).</span>
@@ -436,8 +420,9 @@
 
         <span class="c1"># Compute residuals</span>
         <span class="n">d</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">L</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+
         <span class="k">for</span> <span class="n">t_i</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dates</span><span class="p">):</span>
-            <span class="n">d</span><span class="p">[:,</span> <span class="n">t_i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">t_i</span><span class="p">]</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span><span class="p">)</span>\
+            <span class="n">d</span><span class="p">[:,</span> <span class="n">t_i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="p">[:,</span> <span class="n">t_i</span><span class="p">]</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">t_i</span><span class="p">]</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span><span class="p">)</span>\
                 <span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Factors_Est</span><span class="p">[:,</span> <span class="n">t_i</span><span class="p">])</span>
 
         <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Starting Bootstrap...&quot;</span><span class="p">)</span>
@@ -448,9 +433,6 @@
         <span class="c1"># print(Walpha_b, Walpha)</span>
         <span class="n">pval</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">Walpha_b</span> <span class="o">&gt;</span> <span class="n">Walpha</span><span class="p">)</span><span class="o">/</span><span class="n">ndraws</span>
         <span class="k">return</span> <span class="n">pval</span></div>
-
-
-
 
 <div class="viewcode-block" id="IPCARegressor.predictOOS"><a class="viewcode-back" href="../../index.html#ipca.IPCARegressor.predictOOS">[docs]</a>    <span class="k">def</span> <span class="nf">predictOOS</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">P</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">mean_factor</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -917,6 +899,23 @@
     <span class="nd">@jit</span><span class="p">(</span><span class="n">nopython</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">_numba_full</span><span class="p">(</span><span class="n">m1</span><span class="p">,</span> <span class="n">m2</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">m1</span><span class="p">,</span> <span class="n">m2</span><span class="p">)</span></div>
+
+
+<span class="k">def</span> <span class="nf">_BS_Walpha_sub</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">):</span>
+    <span class="n">X_b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">L</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="p">):</span>
+        <span class="n">d_temp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">standard_t</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="o">*</span><span class="n">d</span><span class="p">[:,</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="p">)]</span>
+        <span class="n">X_b</span><span class="p">[:,</span> <span class="n">t</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">t</span><span class="p">]</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span><span class="p">[:,</span> <span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>\
+            <span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Factors_Est</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">t</span><span class="p">])</span> <span class="o">+</span> <span class="n">d_temp</span>
+
+    <span class="c1"># Re-estimate unrestricted model</span>
+    <span class="n">Gamma</span><span class="p">,</span> <span class="n">Factors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fit_ipca</span><span class="p">(</span><span class="n">X</span><span class="o">=</span><span class="n">X_b</span><span class="p">,</span> <span class="n">W</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">,</span> <span class="n">PSF</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">PSF</span><span class="p">,</span>
+                                    <span class="n">val_obs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">val_obs</span><span class="p">,</span> <span class="n">quiet</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Compute and store Walpha_b</span>
+    <span class="n">Walpha_b</span> <span class="o">=</span> <span class="n">Gamma</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">Gamma</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">:])</span>
+
+    <span class="k">return</span> <span class="n">Walpha_b</span>
 </pre></div>
 
            </div>
