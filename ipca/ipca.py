@@ -6,22 +6,6 @@ from numba import jit
 import time
 from joblib import Parallel, delayed
 
-def _BS_Walpha_sub(self, n, d):
-    X_b = np.full((self.L, self.T), np.nan)
-    for t in range(self.T):
-        d_temp = np.random.standard_t(5)*d[:, np.random.randint(0, high=self.T)]
-        X_b[:, t] = self.W[:, :, t].dot(self.Gamma_Est[:, :-1])\
-            .dot(self.Factors_Est[:-1, t]) + d_temp
-
-    # Re-estimate unrestricted model
-    Gamma, Factors = self._fit_ipca(X=X_b, W=self.W, PSF=self.PSF,
-                                    val_obs=self.val_obs, quiet=True)
-
-    # Compute and store Walpha_b
-    Walpha_b = Gamma[-1, :].T.dot(Gamma[-1, :])
-
-    return Walpha_b
-
 class IPCARegressor:
     """
     This class implements the IPCA algorithm by Kelly, Pruitt, Su (2017).
@@ -293,8 +277,9 @@ class IPCARegressor:
 
         # Compute residuals
         d = np.full((self.L, self.T), np.nan)
+
         for t_i, t in enumerate(self.dates):
-            d[:, t_i] = self.W[:, :, t_i].dot(self.Gamma_Est)\
+            d[:, t_i] = self.X[:, t_i]-self.W[:, :, t_i].dot(self.Gamma_Est)\
                 .dot(self.Factors_Est[:, t_i])
 
         print("Starting Bootstrap...")
@@ -305,9 +290,6 @@ class IPCARegressor:
         # print(Walpha_b, Walpha)
         pval = np.sum(Walpha_b > Walpha)/ndraws
         return pval
-
-
-
 
     def predictOOS(self, P=None, mean_factor=False):
         """
@@ -774,3 +756,20 @@ class IPCARegressor:
     @jit(nopython=True)
     def _numba_full(m1, m2):
         return np.full(m1, m2)
+
+
+def _BS_Walpha_sub(self, n, d):
+    X_b = np.full((self.L, self.T), np.nan)
+    for t in range(self.T):
+        d_temp = np.random.standard_t(5)*d[:, np.random.randint(0, high=self.T)]
+        X_b[:, t] = self.W[:, :, t].dot(self.Gamma_Est[:, :-1])\
+            .dot(self.Factors_Est[:-1, t]) + d_temp
+
+    # Re-estimate unrestricted model
+    Gamma, Factors = self._fit_ipca(X=X_b, W=self.W, PSF=self.PSF,
+                                    val_obs=self.val_obs, quiet=True)
+
+    # Compute and store Walpha_b
+    Walpha_b = Gamma[-1, :].T.dot(Gamma[-1, :])
+
+    return Walpha_b
