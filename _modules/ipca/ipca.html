@@ -401,9 +401,9 @@
 <span class="sd">        ----------</span>
 
 <span class="sd">        ndraws  : integer, default=1000</span>
-<span class="sd">            Number of bootstrap draws and re-estiamtions to be performed</span>
+<span class="sd">            Number of bootstrap draws and re-estimations to be performed</span>
 
-<span class="sd">        backend : optional,</span>
+<span class="sd">        backend : optional</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -546,7 +546,6 @@
         <span class="n">tol_current</span> <span class="o">=</span> <span class="mi">1</span>
 
         <span class="nb">iter</span> <span class="o">=</span> <span class="mi">0</span>
-
 
         <span class="k">while</span><span class="p">((</span><span class="nb">iter</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_iter</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">tol_current</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">iter_tol</span><span class="p">)):</span>
 
@@ -864,7 +863,6 @@
             <span class="n">Num_pred</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">((</span><span class="n">Ytrue</span><span class="o">-</span><span class="n">Ypred</span><span class="p">))</span><span class="o">.</span><span class="n">dot</span><span class="p">((</span><span class="n">Ytrue</span><span class="o">-</span><span class="n">Ypred</span><span class="p">))</span>
             <span class="n">Denom_pred</span> <span class="o">+=</span> <span class="n">Ytrue</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">Ytrue</span><span class="p">)</span>
 
-
         <span class="n">r2_total_x</span> <span class="o">=</span> <span class="mi">1</span><span class="o">-</span><span class="n">Num_tot</span><span class="o">/</span><span class="n">Denom_tot</span>
         <span class="n">r2_pred_x</span> <span class="o">=</span> <span class="mi">1</span><span class="o">-</span><span class="n">Num_pred</span><span class="o">/</span><span class="n">Denom_pred</span>
 
@@ -903,6 +901,7 @@
 
 <span class="k">def</span> <span class="nf">_BS_Walpha_sub</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">):</span>
     <span class="n">X_b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">L</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="p">):</span>
         <span class="n">d_temp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">standard_t</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="o">*</span><span class="n">d</span><span class="p">[:,</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="p">)]</span>
         <span class="n">X_b</span><span class="p">[:,</span> <span class="n">t</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">t</span><span class="p">]</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span><span class="p">[:,</span> <span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>\
