@@ -395,7 +395,7 @@
 
 <div class="viewcode-block" id="IPCARegressor.BS_Walpha"><a class="viewcode-back" href="../../index.html#ipca.IPCARegressor.BS_Walpha">[docs]</a>    <span class="k">def</span> <span class="nf">BS_Walpha</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ndraws</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">n_jobs</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="s1">&#39;loky&#39;</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Bootstrap inference on the hypotheses Gamma_alpha = 0</span>
+<span class="sd">        Bootstrap inference on the hypothesis Gamma_alpha = 0</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -404,6 +404,7 @@
 <span class="sd">            Number of bootstrap draws and re-estimations to be performed</span>
 
 <span class="sd">        backend : optional</span>
+<span class="sd">            Value is either &#39;loky&#39; or &#39;multiprocessing&#39;</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -432,6 +433,51 @@
 
         <span class="c1"># print(Walpha_b, Walpha)</span>
         <span class="n">pval</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">Walpha_b</span> <span class="o">&gt;</span> <span class="n">Walpha</span><span class="p">)</span><span class="o">/</span><span class="n">ndraws</span>
+        <span class="k">return</span> <span class="n">pval</span></div>
+
+
+<div class="viewcode-block" id="IPCARegressor.BS_Wbeta"><a class="viewcode-back" href="../../index.html#ipca.IPCARegressor.BS_Wbeta">[docs]</a>    <span class="k">def</span> <span class="nf">BS_Wbeta</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ndraws</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">n_jobs</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="s1">&#39;loky&#39;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Test of instrument significance.</span>
+<span class="sd">        Bootstrap inference on the hypothesis  l-th column of Gamma_beta = 0.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+
+<span class="sd">        ndraws  : integer, default=1000</span>
+<span class="sd">            Number of bootstrap draws and re-estimations to be performed</span>
+
+<span class="sd">        backend : optional</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        pval : float</span>
+<span class="sd">            P-value from the hypothesis test H0: Gamma_alpha=0</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">PSFcase</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Need to fit model without intercept first.&#39;</span><span class="p">)</span>
+
+        <span class="n">pval</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">np</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">row_l</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span><span class="p">,</span> <span class="mi">0</span><span class="p">)):</span>
+
+            <span class="c1"># Compute Wbeta_l if l-th characteristics is set to zero</span>
+            <span class="n">Wbeta_l</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span><span class="p">[</span><span class="n">row_l</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span><span class="p">[</span><span class="n">row_l</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
+
+            <span class="c1"># Compute residuals</span>
+            <span class="n">d</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">L</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">t_i</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dates</span><span class="p">):</span>
+                <span class="n">d</span><span class="p">[:,</span> <span class="n">t_i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="p">[:,</span> <span class="n">t_i</span><span class="p">]</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">t_i</span><span class="p">]</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span><span class="p">)</span>\
+                    <span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Factors_Est</span><span class="p">[:,</span> <span class="n">t_i</span><span class="p">])</span>
+
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Starting Bootstrap...&quot;</span><span class="p">)</span>
+            <span class="n">Wbeta_l_b</span> <span class="o">=</span> <span class="n">Parallel</span><span class="p">(</span><span class="n">n_jobs</span><span class="o">=</span><span class="n">n_jobs</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="mi">10</span><span class="p">)(</span>
+                <span class="n">delayed</span><span class="p">(</span><span class="n">_BS_Wbeta_sub</span><span class="p">)(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="n">row_l</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">ndraws</span><span class="p">))</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Done!&quot;</span><span class="p">)</span>
+
+            <span class="n">pval</span><span class="p">[</span><span class="n">row_l</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">Wbeta_l_b</span> <span class="o">&gt;</span> <span class="n">Wbeta_l</span><span class="p">)</span><span class="o">/</span><span class="n">ndraws</span>
         <span class="k">return</span> <span class="n">pval</span></div>
 
 <div class="viewcode-block" id="IPCARegressor.predictOOS"><a class="viewcode-back" href="../../index.html#ipca.IPCARegressor.predictOOS">[docs]</a>    <span class="k">def</span> <span class="nf">predictOOS</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">P</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">mean_factor</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
@@ -915,6 +961,27 @@
     <span class="n">Walpha_b</span> <span class="o">=</span> <span class="n">Gamma</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">Gamma</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">])</span>
 
     <span class="k">return</span> <span class="n">Walpha_b</span>
+
+
+<span class="k">def</span> <span class="nf">_BS_Wbeta_sub</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="n">l</span><span class="p">):</span>
+    <span class="n">X_b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">L</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+    <span class="c1">#Modify Gamma_beta such that its l-th row is zero</span>
+    <span class="n">Gamma_beta_l</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span><span class="p">)</span>
+    <span class="n">Gamma_beta_l</span><span class="p">[</span><span class="n">l</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="p">):</span>
+        <span class="n">d_temp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">standard_t</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="o">*</span><span class="n">d</span><span class="p">[:,</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="p">)]</span>
+        <span class="n">X_b</span><span class="p">[:,</span> <span class="n">t</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">t</span><span class="p">]</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">Gamma_beta_l</span><span class="p">)</span>\
+            <span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Factors_Est</span><span class="p">[:,</span> <span class="n">t</span><span class="p">])</span> <span class="o">+</span> <span class="n">d_temp</span>
+
+    <span class="c1"># Re-estimate unrestricted model</span>
+    <span class="n">Gamma</span><span class="p">,</span> <span class="n">Factors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fit_ipca</span><span class="p">(</span><span class="n">X</span><span class="o">=</span><span class="n">X_b</span><span class="p">,</span> <span class="n">W</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">,</span> <span class="n">PSF</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">PSF</span><span class="p">,</span>
+                                    <span class="n">val_obs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">val_obs</span><span class="p">,</span> <span class="n">quiet</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Compute and store Walpha_b</span>
+    <span class="n">Wbeta_l_b</span> <span class="o">=</span> <span class="n">Gamma</span><span class="p">[</span><span class="n">l</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">Gamma</span><span class="p">[</span><span class="n">l</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">Wbeta_l_b</span>
 </pre></div>
 
            </div>
