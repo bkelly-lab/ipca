@@ -273,7 +273,7 @@ class IPCARegressor:
             raise ValueError('Need to fit model with intercept first.')
 
         # Compute Walpha
-        Walpha = self.Gamma_Est[-1, :].T.dot(self.Gamma_Est[-1, :])
+        Walpha = self.Gamma_Est[:, -1].T.dot(self.Gamma_Est[:, -1])
 
         # Compute residuals
         d = np.full((self.L, self.T), np.nan)
@@ -769,6 +769,6 @@ def _BS_Walpha_sub(self, n, d):
                                     val_obs=self.val_obs, quiet=True)
 
     # Compute and store Walpha_b
-    Walpha_b = Gamma[-1, :].T.dot(Gamma[-1, :])
+    Walpha_b = Gamma[:, -1].T.dot(Gamma[:, -1])
 
     return Walpha_b
