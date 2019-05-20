@@ -252,7 +252,7 @@ class IPCARegressor:
 
     def BS_Walpha(self, ndraws=1000, n_jobs=-1, backend='loky'):
         """
-        Bootstrap inference on the hypotheses Gamma_alpha = 0
+        Bootstrap inference on the hypothesis Gamma_alpha = 0
 
         Parameters
         ----------
@@ -261,6 +261,7 @@ class IPCARegressor:
             Number of bootstrap draws and re-estimations to be performed
 
         backend : optional
+            Value is either 'loky' or 'multiprocessing'
 
         Returns
         -------
@@ -289,6 +290,51 @@ class IPCARegressor:
 
         # print(Walpha_b, Walpha)
         pval = np.sum(Walpha_b > Walpha)/ndraws
+        return pval
+
+
+    def BS_Wbeta(self, ndraws=1000, n_jobs=-1, backend='loky'):
+        """
+        Test of instrument significance.
+        Bootstrap inference on the hypothesis  l-th column of Gamma_beta = 0.
+
+        Parameters
+        ----------
+
+        ndraws  : integer, default=1000
+            Number of bootstrap draws and re-estimations to be performed
+
+        backend : optional
+
+        Returns
+        -------
+
+        pval : float
+            P-value from the hypothesis test H0: Gamma_alpha=0
+        """
+
+        if self.PSFcase:
+            raise ValueError('Need to fit model without intercept first.')
+
+        pval = np.full((np.size(self.Gamma_Est, 0)), np.nan)
+
+        for row_l in range(np.size(self.Gamma_Est, 0)):
+
+            # Compute Wbeta_l if l-th characteristics is set to zero
+            Wbeta_l = self.Gamma_Est[row_l, :].dot(self.Gamma_Est[row_l, :].T)
+
+            # Compute residuals
+            d = np.full((self.L, self.T), np.nan)
+            for t_i, t in enumerate(self.dates):
+                d[:, t_i] = self.X[:, t_i]-self.W[:, :, t_i].dot(self.Gamma_Est)\
+                    .dot(self.Factors_Est[:, t_i])
+
+            print("Starting Bootstrap...")
+            Wbeta_l_b = Parallel(n_jobs=n_jobs, backend=backend, verbose=10)(
+                delayed(_BS_Wbeta_sub)(self, n, d, row_l) for n in range(ndraws))
+            print("Done!")
+
+            pval[row_l] = np.sum(Wbeta_l_b > Wbeta_l)/ndraws
         return pval
 
     def predictOOS(self, P=None, mean_factor=False):
@@ -772,3 +818,24 @@ def _BS_Walpha_sub(self, n, d):
     Walpha_b = Gamma[:, -1].T.dot(Gamma[:, -1])
 
     return Walpha_b
+
+
+def _BS_Wbeta_sub(self, n, d, l):
+    X_b = np.full((self.L, self.T), np.nan)
+    np.random.seed(n)
+    #Modify Gamma_beta such that its l-th row is zero
+    Gamma_beta_l = np.copy(self.Gamma_Est)
+    Gamma_beta_l[l, :] = 0
+    for t in range(self.T):
+        d_temp = np.random.standard_t(5)*d[:, np.random.randint(0, high=self.T)]
+        X_b[:, t] = self.W[:, :, t].dot(Gamma_beta_l)\
+            .dot(self.Factors_Est[:, t]) + d_temp
+
+    # Re-estimate unrestricted model
+    Gamma, Factors = self._fit_ipca(X=X_b, W=self.W, PSF=self.PSF,
+                                    val_obs=self.val_obs, quiet=True)
+
+    # Compute and store Walpha_b
+    Wbeta_l_b = Gamma[l, :].dot(Gamma[l, :].T)
+
+    return Wbeta_l_b
