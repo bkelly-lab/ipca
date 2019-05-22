@@ -195,13 +195,15 @@ estimation is stopped</p></li>
 
 <dl class="method">
 <dt id="ipca.IPCARegressor.BS_Wbeta">
-<code class="descname">BS_Wbeta</code><span class="sig-paren">(</span><em>ndraws=1000</em>, <em>n_jobs=-1</em>, <em>backend='loky'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.BS_Wbeta"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.BS_Wbeta" title="Permalink to this definition">¶</a></dt>
+<code class="descname">BS_Wbeta</code><span class="sig-paren">(</span><em>l</em>, <em>ndraws=1000</em>, <em>n_jobs=-1</em>, <em>backend='loky'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.BS_Wbeta"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.BS_Wbeta" title="Permalink to this definition">¶</a></dt>
 <dd><p>Test of instrument significance.
 Bootstrap inference on the hypothesis  l-th column of Gamma_beta = 0.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
+<li><p><strong>l</strong> (<em>integer</em>) – Position of the characteristics for which the bootstrap is to be carried out. For example, if there are 10 characteristics, l is in the range 0 to 9 (left-/right-inclusive).</p></li>
 <li><p><strong>ndraws</strong> (<em>integer, default=1000</em>) – Number of bootstrap draws and re-estimations to be performed</p></li>
+<li><p><strong>n_jobs</strong> (<em>integer</em>) – Number of cores to be used for multiprocessing. If -1, all available cores are used.</p></li>
 <li><p><strong>backend</strong> (<em>optional</em>)</p></li>
 </ul>
 </dd>
