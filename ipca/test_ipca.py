@@ -93,5 +93,5 @@ print('p-value', pval)
 # Test Wbeta Bootstrap
 regr = IPCARegressor(n_factors=1, intercept=False)
 Gamma_New, Factor_New = regr.fit(P=data)
-pval = regr.BS_Wbeta(ndraws=100)
+pval = regr.BS_Wbeta(0, ndraws=100)
 print('p-value', pval)

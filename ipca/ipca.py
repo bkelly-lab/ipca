@@ -292,8 +292,7 @@ class IPCARegressor:
         pval = np.sum(Walpha_b > Walpha)/ndraws
         return pval
 
-
-    def BS_Wbeta(self, ndraws=1000, n_jobs=-1, backend='loky'):
+    def BS_Wbeta(self, l, ndraws=1000, n_jobs=-1, backend='loky'):
         """
         Test of instrument significance.
         Bootstrap inference on the hypothesis  l-th column of Gamma_beta = 0.
@@ -301,8 +300,14 @@ class IPCARegressor:
         Parameters
         ----------
 
+        l   : integer
+            Position of the characteristics for which the bootstrap is to be carried out. For example, if there are 10 characteristics, l is in the range 0 to 9 (left-/right-inclusive).
+
         ndraws  : integer, default=1000
             Number of bootstrap draws and re-estimations to be performed
+
+        n_jobs  : integer
+            Number of cores to be used for multiprocessing. If -1, all available cores are used.
 
         backend : optional
 
@@ -316,12 +321,10 @@ class IPCARegressor:
         if self.PSFcase:
             raise ValueError('Need to fit model without intercept first.')
 
-        pval = np.full((np.size(self.Gamma_Est, 0)), np.nan)
-
-        for row_l in range(np.size(self.Gamma_Est, 0)):
+        if l in range(np.size(self.Gamma_Est, 0)):
 
             # Compute Wbeta_l if l-th characteristics is set to zero
-            Wbeta_l = self.Gamma_Est[row_l, :].dot(self.Gamma_Est[row_l, :].T)
+            Wbeta_l = self.Gamma_Est[l, :].dot(self.Gamma_Est[l, :].T)
 
             # Compute residuals
             d = np.full((self.L, self.T), np.nan)
@@ -331,10 +334,13 @@ class IPCARegressor:
 
             print("Starting Bootstrap...")
             Wbeta_l_b = Parallel(n_jobs=n_jobs, backend=backend, verbose=10)(
-                delayed(_BS_Wbeta_sub)(self, n, d, row_l) for n in range(ndraws))
+                delayed(_BS_Wbeta_sub)(self, n, d, l) for n in range(ndraws))
             print("Done!")
 
-            pval[row_l] = np.sum(Wbeta_l_b > Wbeta_l)/ndraws
+            pval = np.sum(Wbeta_l_b > Wbeta_l)/ndraws
+
+        else:
+            raise ValueError('Characteristic position index "l" out of range.')
         return pval
 
     def predictOOS(self, P=None, mean_factor=False):
