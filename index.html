@@ -227,17 +227,17 @@ scheme.</p>
 <li><p><strong>P</strong> (<em>numpy array</em>) – Panel of stacked data. Each row corresponds to an observation
 (i, t) where i denotes the entity index and t denotes
 the time index. The panel may be unbalanced. The number of unique
-entities is n_samples, the number of unique dates is n_time, and
-the number of characteristics used as instruments is n_characts.
+entities is n_samples, the number of unique dates is T, and
+the number of characteristics used as instruments is L.
 The columns of the panel are organized in the following order:</p>
 <ul>
 <li><p>Column 1: entity id (i)</p></li>
 <li><p>Column 2: time index (t)</p></li>
 <li><p>Column 3: dependent variable corresponding to observation (i,t)</p></li>
-<li><p>Column 4 to column 4+n_characts: characteristics.</p></li>
+<li><p>Column 4 to column 4+L: characteristics.</p></li>
 </ul>
 </li>
-<li><p><strong>PSF</strong> (<em>numpy array, optional</em>) – Set of pre-specified factors as matrix of dimension (n_PSF, n_time)</p></li>
+<li><p><strong>PSF</strong> (<em>numpy array, optional</em>) – Set of pre-specified factors as matrix of dimension (M, T)</p></li>
 <li><p><strong>refit</strong> (<em>boolean, optional</em>) – Indicates whether the regressor should be re-fit. If set to True
 the function will skip unpacking the panel into a tensor and
 instead use the stored values from the previous fit. Note, it is
@@ -246,16 +246,16 @@ still necessary to pass the previously used P.</p></li>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p><ul class="simple">
-<li><p><strong>Gamma</strong> (<em>numpy array</em>) – Array with dimensions (n_characts, n_factors) containing the
+<li><p><strong>Gamma</strong> (<em>numpy array</em>) – Array with dimensions (L, n_factors) containing the
 mapping between characteristics and factors loadings. If there
-are n_PSF many pre-specified factors in the model then the
-matrix returned is of dimension (n_characts, (n_factors+n_PSF)).
+are M many pre-specified factors in the model then the
+matrix returned is of dimension (L, (n_factors+M)).
 If an intercept is included in the model, its loadings are returned
 in the last column of Gamma.</p></li>
-<li><p><strong>Factors</strong> (<em>numpy array</em>) – Array with dimensions (n_factors, n_time) containing the estimated
+<li><p><strong>Factors</strong> (<em>numpy array</em>) – Array with dimensions (n_factors, T) containing the estimated
 factors. If pre-specified factors were passed the returned
-array is of dimension ((n_factors - n_PSF), n_time),
-corresponding to the n_factors - n_PSF many factors estimated on
+array is of dimension ((n_factors - M), T),
+corresponding to the n_factors - M many factors estimated on
 top of the pre-specified ones.</p></li>
 </ul>
 </p>
@@ -274,13 +274,13 @@ top of the pre-specified ones.</p></li>
 (i, t) where i denotes the entity index and t denotes
 the time index. The panel may be unbalanced. If an observation
 contains missing data NaN will be returned. Note that the
-number of passed characteristics n_characts must match the
+number of passed characteristics L must match the
 number of characteristics used when fitting the regressor.
 The columns of the panel are organized in the following order:</p>
 <ul>
 <li><p>Column 1: entity id (i)</p></li>
 <li><p>Column 2: time index (t)</p></li>
-<li><p>Column 3 to column 3+n_characts: characteristics.</p></li>
+<li><p>Column 3 to column 3+L: characteristics.</p></li>
 </ul>
 </li>
 <li><p><strong>mean_factor</strong> (<em>boolean</em>) – If true, the estimated factors are averaged in the time-series
@@ -310,7 +310,7 @@ characteristics information.</p>
 the time index. All data must correspond to time t, i.e. all
 observations occur on the same date.
 If an observation contains missing data NaN will be returned.
-Note that the number of characteristics (n_characts) passed,
+Note that the number of characteristics (L) passed,
 has to match the number of characteristics used when fitting
 the regressor.
 The columns of the panel are organized in the following order:</p>
@@ -318,7 +318,7 @@ The columns of the panel are organized in the following order:</p>
 <li><p>Column 1: entity id (i)</p></li>
 <li><p>Column 2: time index (t)</p></li>
 <li><p>Column 3: dependent variable corresponding to observation (i,t)</p></li>
-<li><p>Column 4 to column 4+n_characts: characteristics.</p></li>
+<li><p>Column 4 to column 4+L: characteristics.</p></li>
 </ul>
 </li>
 <li><p><strong>mean_factor</strong> (<em>boolean</em>) – If true, the estimated factors are averaged in the time-series
