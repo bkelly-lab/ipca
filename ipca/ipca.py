@@ -61,17 +61,17 @@ class IPCARegressor:
             Panel of stacked data. Each row corresponds to an observation
             (i, t) where i denotes the entity index and t denotes
             the time index. The panel may be unbalanced. The number of unique
-            entities is n_samples, the number of unique dates is n_time, and
-            the number of characteristics used as instruments is n_characts.
+            entities is n_samples, the number of unique dates is T, and
+            the number of characteristics used as instruments is L.
             The columns of the panel are organized in the following order:
 
             - Column 1: entity id (i)
             - Column 2: time index (t)
             - Column 3: dependent variable corresponding to observation (i,t)
-            - Column 4 to column 4+n_characts: characteristics.
+            - Column 4 to column 4+L: characteristics.
 
         PSF : numpy array, optional
-            Set of pre-specified factors as matrix of dimension (n_PSF, n_time)
+            Set of pre-specified factors as matrix of dimension (M, T)
 
         refit : boolean, optional
             Indicates whether the regressor should be re-fit. If set to True
@@ -83,31 +83,31 @@ class IPCARegressor:
         -------
 
         Gamma : numpy array
-            Array with dimensions (n_characts, n_factors) containing the
+            Array with dimensions (L, n_factors) containing the
             mapping between characteristics and factors loadings. If there
-            are n_PSF many pre-specified factors in the model then the
-            matrix returned is of dimension (n_characts, (n_factors+n_PSF)).
+            are M many pre-specified factors in the model then the
+            matrix returned is of dimension (L, (n_factors+M)).
             If an intercept is included in the model, its loadings are returned
             in the last column of Gamma.
 
         Factors : numpy array
-            Array with dimensions (n_factors, n_time) containing the estimated
+            Array with dimensions (n_factors, T) containing the estimated
             factors. If pre-specified factors were passed the returned
-            array is of dimension ((n_factors - n_PSF), n_time),
-            corresponding to the n_factors - n_PSF many factors estimated on
+            array is of dimension ((n_factors - M), T),
+            corresponding to the n_factors - M many factors estimated on
             top of the pre-specified ones.
 
         """
-        # Check re-fitting is valied
+        # Check re-fitting is valid
         if refit:
             try:
                 self.X
             except AttributeError:
                 raise ValueError('Refit only possible after initial fit.')
 
-        # Handel paenl
+        # Check panel input
         if P is None:
-            raise ValueError('Must pass panel data.')
+            raise ValueError('Must pass panel input data.')
         else:
             # remove panel rows containing missing obs
             P = P[~np.any(np.isnan(P), axis=1)]
@@ -121,25 +121,19 @@ class IPCARegressor:
             if np.size(PSF, axis=1) != np.size(np.unique(P[:, 1])):
                 raise ValueError("""Number of PSF observations must match
                                  number of unique dates in panel P""")
-            self.UsePreSpecFactors = True
+            self.has_PSF = True
         else:
-            self.UsePreSpecFactors = False
+            self.has_PSF = False
 
-        if self.UsePreSpecFactors:
+        if self.has_PSF:
             if np.size(PSF, axis=0) == self.n_factors:
                 warnings.warn("The number of factors (n_factors) to be "
-                              "estimated matches, the number of "
+                              "estimated matches the number of "
                               "pre-specified factors. No additional factors "
                               "will be estimated. To estimate additional "
                               "factors increase n_factors.")
 
-        # Handle intercept
-        if self.intercept and (self.n_factors == np.size(P, axis=1)-3):
-            raise ValueError("""Number of factors + intercept higher than
-                                number of characteristics. Reduce number of
-                                factors or set intercept to false.""")
-
-        #  Treating intercept it as a prespecified factor
+        #  Treating intercept as if was a prespecified factor
         if self.intercept:
             self.n_factors_eff = self.n_factors + 1
             if PSF is not None:
@@ -149,18 +143,13 @@ class IPCARegressor:
         else:
             self.n_factors_eff = self.n_factors
 
-        # Check enough features provided
-        if np.size(P, axis=1) - 3 < self.n_factors_eff:
-            raise ValueError('The number of factors requested exceeds number of features')
 
         # Determine fit case - if intercept or PSF or both use PSFcase fitting
-        # Note PSFcase in contrast to UsePreSpecFactors is only indicating
+        # Note PSFcase in contrast to has_PSF is only indicating
         # that the IPCA fitting is carried out as if PSF were passed even if
         # only an intercept was passed.
-        if self.UsePreSpecFactors or self.intercept:
-            self.PSFcase = True
-        else:
-            self.PSFcase = False
+        self.PSFcase = True if self.has_PSF or self.intercept else False
+
 
         # Run IPCA
         if not refit:
@@ -172,23 +161,18 @@ class IPCARegressor:
 
         # Store estimates
         if self.PSFcase:
-            if self.intercept and self.UsePreSpecFactors:
+            if self.intercept and self.has_PSF:
                 PSF = np.concatenate((PSF, np.ones((1, len(self.dates)))), axis=0)
             elif self.intercept:
                 PSF = np.ones((1, len(self.dates)))
 
             Factors = np.concatenate((Factors, PSF), axis=0)
 
-        self.Gamma_Est = Gamma
-        self.Factors_Est = Factors
-
+        self.Gamma_Est, self.Factors_Est = Gamma, Factors
 
         # Save unpacked panel for Re-fitting
         if not refit:
-            self.PSF = PSF
-            self.X = X
-            self.W = W
-            self.val_obs = val_obs
+            self.PSF, self.X, self.W, self.val_obs = PSF, X, W, val_obs
 
         # Compute Goodness of Fit
         self.r2_total, self.r2_pred, self.r2_total_x, self.r2_pred_x = \
@@ -207,13 +191,13 @@ class IPCARegressor:
             (i, t) where i denotes the entity index and t denotes
             the time index. The panel may be unbalanced. If an observation
             contains missing data NaN will be returned. Note that the
-            number of passed characteristics n_characts must match the
+            number of passed characteristics L must match the
             number of characteristics used when fitting the regressor.
             The columns of the panel are organized in the following order:
 
             - Column 1: entity id (i)
             - Column 2: time index (t)
-            - Column 3 to column 3+n_characts: characteristics.
+            - Column 3 to column 3+L: characteristics.
 
         mean_factor: boolean
             If true, the estimated factors are averaged in the time-series
@@ -234,8 +218,8 @@ class IPCARegressor:
 
         if np.any(np.isnan(P)):
             raise ValueError('Cannot contain missing observations / nan values.')
-        n_obs = np.size(P, axis=0)
-        Ypred = np.full((n_obs), np.nan)
+        N = np.size(P, axis=0)
+        Ypred = np.full((N), np.nan)
 
         mean_Factors_Est = np.mean(self.Factors_Est, axis=1).reshape((-1, 1))
 
@@ -355,7 +339,7 @@ class IPCARegressor:
             the time index. All data must correspond to time t, i.e. all
             observations occur on the same date.
             If an observation contains missing data NaN will be returned.
-            Note that the number of characteristics (n_characts) passed,
+            Note that the number of characteristics (L) passed,
             has to match the number of characteristics used when fitting
             the regressor.
             The columns of the panel are organized in the following order:
@@ -363,7 +347,7 @@ class IPCARegressor:
             - Column 1: entity id (i)
             - Column 2: time index (t)
             - Column 3: dependent variable corresponding to observation (i,t)
-            - Column 4 to column 4+n_characts: characteristics.
+            - Column 4 to column 4+L: characteristics.
 
         mean_factor: boolean
             If true, the estimated factors are averaged in the time-series
@@ -385,12 +369,11 @@ class IPCARegressor:
         if len(np.unique(P[:, 1])) > 1:
             raise ValueError('The panel must only have a single timestamp.')
 
-        n_obs = np.size(P, axis=0)
-        Ypred = np.full((n_obs), np.nan)
+        N = np.size(P, axis=0)
+        Ypred = np.full((N), np.nan)
 
         # Unpack the panel into Z, Y
-        Z = P[:, 3:]
-        Y = P[:, 2]
+        Z, Y = P[:, 3:], P[:, 2]
 
         # Compute realized factor returns
         Numer = self.Gamma_Est.T.dot(Z.T).dot(Y)
@@ -412,16 +395,16 @@ class IPCARegressor:
 
         Parameters
         ----------
-        X : array-like of shape (n_characts,n_time),
+        X : array-like of shape (L,T),
             i.e. characteristics weighted portfolios
 
-        W : array_like of shape (n_characts, n_characts,n_time),
+        W : array_like of shape (L, L,T),
 
         nan_mask : array, boolean
             The value at nan_mask[n,t] is True if no nan values are contained
             in Z[n,:,t] or Y[n,t] and False otherwise.
 
-        PSF : optional, array-like of shape (n_PSF, n_time), i.e.
+        PSF : optional, array-like of shape (M, T), i.e.
             pre-specified factors
 
         quiet   : optional, bool
@@ -430,16 +413,16 @@ class IPCARegressor:
 
         Returns
         -------
-        Gamma : array-like with dimensions (n_characts, n_factors). If there
+        Gamma : array-like with dimensions (L, n_factors). If there
             are n_prespec many pre-specified factors in the model then the
-            matrix returned is of dimension (n_characts, (n_factors+n_PSF)).
+            matrix returned is of dimension (L, (n_factors+M)).
             If an intercept is included in the model, its loadings are returned
             in the last column of Gamma.
 
-        Factors : array_like with dimensions (n_factors, n_time). If
+        Factors : array_like with dimensions (n_factors, T). If
             pre-specified factors were passed the returned matrix is
-            of dimension ((n_factors - n_PSF), n_time), corresponding to the
-            n_factors - n_PSF many factors estimated on top of the pre-
+            of dimension ((n_factors - M), T), corresponding to the
+            n_factors - M many factors estimated on top of the pre-
             specified ones.
         """
 
@@ -447,9 +430,8 @@ class IPCARegressor:
         Gamma_Old, s, v = np.linalg.svd(X)
         Gamma_Old = Gamma_Old[:, :self.n_factors_eff]
         s = s[:self.n_factors_eff]
-        v = v.T
-        v = v[:, :self.n_factors_eff]
-        Factor_Old = np.diag(s).dot(v.T)
+        v = v[:self.n_factors_eff, :]
+        Factor_Old = np.diag(s).dot(v)
 
         # Estimation Step
         tol_current = 1
@@ -461,20 +443,16 @@ class IPCARegressor:
             if self.PSFcase:
                 Gamma_New, Factor_New = self._ALS_fit(Gamma_Old, W, X,
                                                       val_obs, PSF=PSF)
-                tol_current = np.max(np.abs(Gamma_New.reshape((-1, 1))
-                                      - Gamma_Old.reshape((-1, 1))))
+                tol_current = np.max(np.abs(Gamma_New - Gamma_Old))
             else:
                 Gamma_New, Factor_New = self._ALS_fit(Gamma_Old, W, X,
                                                       val_obs)
-                tol_current = np.max(np.abs(np.vstack((Gamma_New.reshape((-1, 1))
-                                      - Gamma_Old.reshape((-1, 1)),
-                                      Factor_New.reshape((-1, 1))
-                                      - Factor_Old.reshape((-1, 1))))))
+                tol_current_G = np.max(np.abs(Gamma_New - Gamma_Old))
+                tol_current_F = np.max(np.abs(Factor_New - Factor_Old))
+                tol_current = max(tol_current_G, tol_current_F)
 
-            # Compute update size
-            Factor_Old = Factor_New
-            Gamma_Old = Gamma_New
-
+            # Update factors and loadings
+            Factor_Old, Gamma_Old = Factor_New, Gamma_New
 
             iter += 1
             if not quiet:
@@ -559,10 +537,10 @@ class IPCARegressor:
         else:
             for t in range(T):
 
-                Numer = Numer + self._numba_kron(X[:, t].reshape((-1, 1)),
+                Numer += self._numba_kron(X[:, t].reshape((-1, 1)),
                                           F_New[:, t].reshape((-1, 1)))\
                                           * val_obs[t]
-                Denom = Denom + self._numba_kron(W[:, :, t],
+                Denom += self._numba_kron(W[:, :, t],
                                           F_New[:, t].reshape((-1, 1))
                                           .dot(F_New[:, t].reshape((1, -1)))) \
                                           * val_obs[t]
@@ -588,71 +566,6 @@ class IPCARegressor:
 
         return Gamma_New, F_New
 
-    def _unpack_panel_XY(self, P):
-        """ Converts a stacked panel of data where each row corresponds to an
-        observation (i, t) into a tensor of dimensions (N, L, T) where N is the
-        number of unique entities, L is the number of characteristics and T is
-        the number of unique dates
-
-        Parameters
-        ----------
-
-        P: Panel of data. Each row corresponds to an observation (i, t). The
-            columns are ordered in the following manner:
-                COLUMN 1: entity id (i)
-                COLUMN 2: time index (t)
-                COLUMN 3: depdent variable Y(i,t)
-                COLUMN 4 and following: L characteristics
-
-        Returns
-        -------
-        P: array-like, tensor of dimensions (N, L, T), containing
-            the characteristics
-
-        Y: array-like, matrix of dimension, containing the dependent variable.
-        """
-
-        dates = np.unique(P[:, 1])
-        ids = np.unique(P[:, 0])
-        T = np.size(dates, axis=0)
-        N = np.size(ids, axis=0)
-        L = np.size(P, axis=1) - 3
-        print('The panel dimensions are:')
-        print('n_samples:', N, ', n_characts:', L, ', n_time:', T)
-
-        bar = progressbar.ProgressBar(maxval=N,
-                                      widgets=[progressbar.Bar('=', '[', ']'),
-                                               ' ', progressbar.Percentage()])
-
-        bar.start()
-        temp = []
-        for n_i, n in enumerate(ids):
-            ixd = np.isin(dates, P[P[:, 0] == 1, 1])
-            temp_n = np.full((T, L+3), np.nan)
-            temp_n[:, 0] = n
-            temp_n[:, 1] = dates
-            temp_n[ixd, :] = P[P[:, 0] == n, :]
-            if np.size(temp_n, axis=0) == 0:
-                continue
-            temp.append(temp_n)
-            bar.update(n_i)
-        bar.finish()
-
-        # Append the missing observations to create balanced panel
-        if len(temp) > 0:
-            P = np.concatenate(temp, axis=0)
-        temp = []
-        Y = np.reshape(P[:, 2], (N, T))
-        nan_mask = ~np.any(np.isnan(P), axis=1)
-        nan_mask = np.reshape(nan_mask, (N, T))
-        # Reshape the panel into P (N, L, T) and Y(N, T)
-        P = np.dstack(np.split(P[:, 3:], N, axis=0))
-        P = np.swapaxes(P, 0, 2)
-
-        self.ids = ids
-        self.dates = dates
-        print("Done!")
-        return P, Y, nan_mask
 
     def _unpack_panel(self, P):
         """ Converts a stacked panel of data where each row corresponds to an
@@ -690,7 +603,7 @@ class IPCARegressor:
         N = np.size(ids, axis=0)
         L = np.size(P, axis=1) - 3
         print('The panel dimensions are:')
-        print('n_samples:', N, ', n_characts:', L, ', n_time:', T)
+        print('n_samples:', N, ', L:', L, ', T:', T)
 
         bar = progressbar.ProgressBar(maxval=T,
                                       widgets=[progressbar.Bar('=', '[', ']'),
@@ -703,17 +616,13 @@ class IPCARegressor:
             ixt = (P[:, 1] == t)
             val_obs[t_i] = np.sum(ixt)
             # Define characteristics weighted matrices
-            X[:, t_i] = np.transpose(P[ixt, 3:]).dot(P[ixt, 2])/val_obs[t_i]
-            W[:, :, t_i] = np.transpose(P[ixt, 3:]).dot(P[ixt, 3:])/val_obs[t_i]
+            X[:, t_i] = P[ixt, 3:].T.dot(P[ixt, 2])/val_obs[t_i]
+            W[:, :, t_i] = P[ixt, 3:].T.dot(P[ixt, 3:])/val_obs[t_i]
             bar.update(t_i)
         bar.finish()
 
         # Store panel dimensions
-        self.ids = ids
-        self.dates = dates
-        self.T = T
-        self.N = N
-        self.L = L
+        self.ids, self.dates, self.T, self.N, self.L = ids, dates, T, N, L
 
         return X, W, val_obs
 
@@ -728,14 +637,14 @@ class IPCARegressor:
         P   :   Panel of stacked data. Each row corresponds to an observation
                 (i, t) where i denotes the entity index and t denotes
                 the time index. The panel may be unbalanced. The number of unique
-                entities is n_samples, the number of unique dates is n_time, and
-                the number of characteristics used as instruments is n_characts.
+                entities is n_samples, the number of unique dates is T, and
+                the number of characteristics used as instruments is L.
                 The columns of the panel are organized in the following order:
 
                 - Column 1: entity id (i)
                 - Column 2: time index (t)
                 - Column 3: dependent variable corresponding to observation (i,t)
-                - Column 4 to column 4+n_characts: characteristics.
+                - Column 4 to column 4+L: characteristics.
 
         """
 
@@ -751,10 +660,7 @@ class IPCARegressor:
         r2_pred = 1-np.nansum((Ypred-Ytrue)**2)/np.nansum(Ytrue**2)
 
         # Compute goodness of fit measures, portfolio level
-        Num_tot = 0
-        Denom_tot = 0
-        Num_pred = 0
-        Denom_pred = 0
+        Num_tot, Denom_tot, Num_pred, Denom_pred = 0, 0, 0, 0
 
         mean_Factors_Est = np.mean(self.Factors_Est, axis=1).reshape((-1, 1))
 
@@ -763,13 +669,13 @@ class IPCARegressor:
             # R2 Total
             Ypred = self.W[:, :, t_i].dot(self.Gamma_Est)\
                 .dot(self.Factors_Est[:, t_i])
-            Num_tot += np.transpose((Ytrue-Ypred)).dot((Ytrue-Ypred))
+            Num_tot += (Ytrue-Ypred).T.dot((Ytrue-Ypred))
             Denom_tot += Ytrue.T.dot(Ytrue)
 
             # R2 Pred
             Ypred = self.W[:, :, t_i].dot(self.Gamma_Est).dot(mean_Factors_Est)
             Ypred = np.squeeze(Ypred)
-            Num_pred += np.transpose((Ytrue-Ypred)).dot((Ytrue-Ypred))
+            Num_pred += (Ytrue-Ypred).T.dot((Ytrue-Ypred))
             Denom_pred += Ytrue.T.dot(Ytrue)
 
         r2_total_x = 1-Num_tot/Denom_tot

@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 from sklearn.utils.testing import assert_raises
 from statsmodels.datasets import grunfeld
-
+import time
 
 from ipca import IPCARegressor
 
@@ -39,6 +39,7 @@ print('R2total_x', regr.r2_total_x)
 print('R2pred_x', regr.r2_pred_x)
 print(Gamma_New)
 print(Factor_New)
+
 
 # Test IPCARegressor with intercept
 regr = IPCARegressor(n_factors=1, intercept=True)
@@ -93,5 +94,5 @@ print('p-value', pval)
 # Test Wbeta Bootstrap
 regr = IPCARegressor(n_factors=1, intercept=False)
 Gamma_New, Factor_New = regr.fit(P=data)
-pval = regr.BS_Wbeta(0, ndraws=100)
+pval = regr.BS_Wbeta(0, ndraws=100, n_jobs=-1)
 print('p-value', pval)
