@@ -270,11 +270,11 @@
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_PSF</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="n">PSF</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_factors</span><span class="p">:</span>
-                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;The number of factors (n_factors) to be &quot;</span>
-                              <span class="s2">&quot;estimated matches the number of &quot;</span>
-                              <span class="s2">&quot;pre-specified factors. No additional factors &quot;</span>
-                              <span class="s2">&quot;will be estimated. To estimate additional &quot;</span>
-                              <span class="s2">&quot;factors increase n_factors.&quot;</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;Note: The number of factors (n_factors) to be</span>
+<span class="s2">                      estimated matches the number of</span>
+<span class="s2">                      pre-specified factors. No additional factors</span>
+<span class="s2">                      will be estimated. To estimate additional</span>
+<span class="s2">                      factors increase n_factors.&quot;&quot;&quot;</span><span class="p">)</span>
 
         <span class="c1">#  Treating intercept as if was a prespecified factor</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">intercept</span><span class="p">:</span>
@@ -286,6 +286,9 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">n_factors_eff</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_factors</span>
 
+        <span class="c1"># Check that enough features provided</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="mi">3</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_factors_eff</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;The number of factors requested exceeds number of features&#39;</span><span class="p">)</span>
 
         <span class="c1"># Determine fit case - if intercept or PSF or both use PSFcase fitting</span>
         <span class="c1"># Note PSFcase in contrast to has_PSF is only indicating</span>
@@ -308,8 +311,10 @@
                 <span class="n">PSF</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">PSF</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dates</span><span class="p">)))),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
             <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">intercept</span><span class="p">:</span>
                 <span class="n">PSF</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dates</span><span class="p">)))</span>
-
-            <span class="n">Factors</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">Factors</span><span class="p">,</span> <span class="n">PSF</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">Factors</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">Factors</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">Factors</span><span class="p">,</span> <span class="n">PSF</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">Factors</span> <span class="o">=</span> <span class="n">PSF</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">Gamma_Est</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">Factors_Est</span> <span class="o">=</span> <span class="n">Gamma</span><span class="p">,</span> <span class="n">Factors</span>
 
@@ -650,13 +655,12 @@
                     <span class="n">F_New</span><span class="p">[:,</span> <span class="n">t</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_numba_solve</span><span class="p">(</span>
                                                     <span class="n">m1</span><span class="p">,</span> <span class="n">m2</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))))</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">F_New</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">K</span><span class="p">,</span> <span class="n">T</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+            <span class="n">F_New</span> <span class="o">=</span> <span class="kc">None</span>
 
 
         <span class="c1"># ALS Step 2</span>
         <span class="n">Numer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_numba_full</span><span class="p">((</span><span class="n">L</span><span class="o">*</span><span class="n">Ktilde</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">)</span>
         <span class="n">Denom</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_numba_full</span><span class="p">((</span><span class="n">L</span><span class="o">*</span><span class="n">Ktilde</span><span class="p">,</span> <span class="n">L</span><span class="o">*</span><span class="n">Ktilde</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">)</span>
-        <span class="c1">#t1 = time.time()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">PSFcase</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">K</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">T</span><span class="p">):</span>
@@ -676,7 +680,7 @@
                                               <span class="o">*</span> <span class="n">val_obs</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
                     <span class="n">Denom</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_numba_kron</span><span class="p">(</span><span class="n">W</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">t</span><span class="p">],</span>
                                               <span class="n">PSF</span><span class="p">[:,</span> <span class="n">t</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
-                                              <span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">PSF</span><span class="p">[:,</span> <span class="n">t</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="p">))</span> <span class="o">*</span> <span class="n">val_obs</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
+                                              <span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">PSF</span><span class="p">[:,</span> <span class="n">t</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">T</span><span class="p">))</span> <span class="o">*</span> <span class="n">val_obs</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">T</span><span class="p">):</span>
 
@@ -689,7 +693,6 @@
                                           <span class="o">*</span> <span class="n">val_obs</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
 
         <span class="n">Gamma_New</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_numba_solve</span><span class="p">(</span><span class="n">Denom</span><span class="p">,</span> <span class="n">Numer</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">L</span><span class="p">,</span> <span class="n">Ktilde</span><span class="p">))</span>
-        <span class="c1">#print(&#39;ALS2&#39;, time.time()-t1)</span>
 
         <span class="c1"># Enforce Orthogonality of Gamma_Beta and factors F</span>
         <span class="k">if</span> <span class="n">K</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
