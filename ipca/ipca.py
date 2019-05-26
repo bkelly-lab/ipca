@@ -127,11 +127,11 @@ class IPCARegressor:
 
         if self.has_PSF:
             if np.size(PSF, axis=0) == self.n_factors:
-                warnings.warn("The number of factors (n_factors) to be "
-                              "estimated matches the number of "
-                              "pre-specified factors. No additional factors "
-                              "will be estimated. To estimate additional "
-                              "factors increase n_factors.")
+                print("""Note: The number of factors (n_factors) to be
+                      estimated matches the number of
+                      pre-specified factors. No additional factors
+                      will be estimated. To estimate additional
+                      factors increase n_factors.""")
 
         #  Treating intercept as if was a prespecified factor
         if self.intercept:
@@ -143,6 +143,9 @@ class IPCARegressor:
         else:
             self.n_factors_eff = self.n_factors
 
+        # Check that enough features provided
+        if np.size(P, axis=1) - 3 < self.n_factors_eff:
+            raise ValueError('The number of factors requested exceeds number of features')
 
         # Determine fit case - if intercept or PSF or both use PSFcase fitting
         # Note PSFcase in contrast to has_PSF is only indicating
@@ -165,8 +168,10 @@ class IPCARegressor:
                 PSF = np.concatenate((PSF, np.ones((1, len(self.dates)))), axis=0)
             elif self.intercept:
                 PSF = np.ones((1, len(self.dates)))
-
-            Factors = np.concatenate((Factors, PSF), axis=0)
+            if Factors is not None:
+                Factors = np.concatenate((Factors, PSF), axis=0)
+            else:
+                Factors = PSF
 
         self.Gamma_Est, self.Factors_Est = Gamma, Factors
 
@@ -507,13 +512,12 @@ class IPCARegressor:
                     F_New[:, t] = np.squeeze(self._numba_solve(
                                                     m1, m2.reshape((-1, 1))))
         else:
-            F_New = np.full((K, T), np.nan)
+            F_New = None
 
 
         # ALS Step 2
         Numer = self._numba_full((L*Ktilde, 1), 0.0)
         Denom = self._numba_full((L*Ktilde, L*Ktilde), 0.0)
-        #t1 = time.time()
         if self.PSFcase:
             if K > 0:
                 for t in range(T):
@@ -533,7 +537,7 @@ class IPCARegressor:
                                               * val_obs[t]
                     Denom += self._numba_kron(W[:, :, t],
                                               PSF[:, t].reshape((-1, 1))
-                                              .dot(PSF[:, t].T)) * val_obs[t]
+                                              .dot(PSF[:, t].reshape((-1, 1)).T)) * val_obs[t]
         else:
             for t in range(T):
 
@@ -546,7 +550,6 @@ class IPCARegressor:
                                           * val_obs[t]
 
         Gamma_New = self._numba_solve(Denom, Numer).reshape((L, Ktilde))
-        #print('ALS2', time.time()-t1)
 
         # Enforce Orthogonality of Gamma_Beta and factors F
         if K > 0:

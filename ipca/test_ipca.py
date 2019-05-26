@@ -27,8 +27,10 @@ data.firm = data.firm.apply(lambda x: ID[x])
 data = data[['firm', 'year', 'invest', 'value', 'capital']]
 # Convert to numpy
 data = data.to_numpy()
-PSF = np.random.randn(len(np.unique(data[:, 1])), 1)
-PSF = PSF.reshape((1, -1))
+PSF = np.random.randn(len(np.unique(data[:, 1])), 2)
+PSF = PSF.reshape((2, -1))
+
+
 
 # Test IPCARegressor
 regr = IPCARegressor(n_factors=1, intercept=False)
@@ -62,6 +64,19 @@ Gamma_New, Factor_New = regr.fit(P=data, refit=True)
 # Test refitting the IPCARegressor on new data
 data_refit = data[data[:, 1] != 1954, :]
 Gamma_New, Factor_New = regr.fit(P=data_refit, refit=False)
+
+# Test PSF - one additional factor estimated
+PSF = np.random.randn(len(np.unique(data[:, 1])), 1)
+PSF = PSF.reshape((1, -1))
+regr = IPCARegressor(n_factors=2, intercept=False)
+Gamma_New, Factor_New = regr.fit(P=data, PSF=PSF, refit=False)
+
+# Test PSF - no additional factors estimated
+PSF = np.random.randn(len(np.unique(data[:, 1])), 2)
+PSF = PSF.reshape((2, -1))
+regr = IPCARegressor(n_factors=2, intercept=False)
+Gamma_New, Factor_New = regr.fit(P=data, PSF=PSF, refit=False)
+
 
 # Test nan observations
 regr = IPCARegressor(n_factors=1, intercept=True)
