@@ -239,7 +239,7 @@ class IPCARegressor:
                     .dot(self.Factors_Est[:, t_i]))
         return Ypred
 
-    def BS_Walpha(self, ndraws=1000, n_jobs=-1, backend='loky'):
+    def BS_Walpha(self, ndraws=1000, n_jobs=1, backend='loky'):
         """
         Bootstrap inference on the hypothesis Gamma_alpha = 0
 
@@ -251,6 +251,9 @@ class IPCARegressor:
 
         backend : optional
             Value is either 'loky' or 'multiprocessing'
+
+        n_jobs  : integer
+            Number of workers to be used. If -1, all available workers are used.
 
         Returns
         -------
@@ -281,7 +284,7 @@ class IPCARegressor:
         pval = np.sum(Walpha_b > Walpha)/ndraws
         return pval
 
-    def BS_Wbeta(self, l, ndraws=1000, n_jobs=-1, backend='loky'):
+    def BS_Wbeta(self, l, ndraws=1000, n_jobs=1, backend='loky'):
         """
         Test of instrument significance.
         Bootstrap inference on the hypothesis  l-th column of Gamma_beta = 0.
@@ -296,7 +299,8 @@ class IPCARegressor:
             Number of bootstrap draws and re-estimations to be performed
 
         n_jobs  : integer
-            Number of cores to be used for multiprocessing. If -1, all available cores are used.
+            Number of workers to be used for multiprocessing.
+            If -1, all available Workers are used.
 
         backend : optional
 
@@ -310,26 +314,23 @@ class IPCARegressor:
         if self.PSFcase:
             raise ValueError('Need to fit model without intercept first.')
 
-        if l in range(np.size(self.Gamma_Est, 0)):
+        # Compute Wbeta_l if l-th characteristics is set to zero
+        Wbeta_l = self.Gamma_Est[l, :].dot(self.Gamma_Est[l, :].T)
+        Wbeta_l = np.trace(Wbeta_l)
+        # Compute residuals
+        d = np.full((self.L, self.T), np.nan)
+        for t_i, t in enumerate(self.dates):
+            d[:, t_i] = self.X[:, t_i]-self.W[:, :, t_i].dot(self.Gamma_Est)\
+                .dot(self.Factors_Est[:, t_i])
 
-            # Compute Wbeta_l if l-th characteristics is set to zero
-            Wbeta_l = self.Gamma_Est[l, :].dot(self.Gamma_Est[l, :].T)
+        print("Starting Bootstrap...")
+        Wbeta_l_b = Parallel(n_jobs=n_jobs, backend=backend, verbose=10)(
+            delayed(_BS_Wbeta_sub)(self, n, d, l) for n in range(ndraws))
+        print("Done!")
 
-            # Compute residuals
-            d = np.full((self.L, self.T), np.nan)
-            for t_i, t in enumerate(self.dates):
-                d[:, t_i] = self.X[:, t_i]-self.W[:, :, t_i].dot(self.Gamma_Est)\
-                    .dot(self.Factors_Est[:, t_i])
+        pval = np.sum(Wbeta_l_b > Wbeta_l)/ndraws
+        print(Wbeta_l_b, Wbeta_l)
 
-            print("Starting Bootstrap...")
-            Wbeta_l_b = Parallel(n_jobs=n_jobs, backend=backend, verbose=10)(
-                delayed(_BS_Wbeta_sub)(self, n, d, l) for n in range(ndraws))
-            print("Done!")
-
-            pval = np.sum(Wbeta_l_b > Wbeta_l)/ndraws
-
-        else:
-            raise ValueError('Characteristic position index "l" out of range.')
         return pval
 
     def predictOOS(self, P=None, mean_factor=False):
@@ -752,5 +753,5 @@ def _BS_Wbeta_sub(self, n, d, l):
 
     # Compute and store Walpha_b
     Wbeta_l_b = Gamma[l, :].dot(Gamma[l, :].T)
-
+    Wbeta_l_b = np.trace(Wbeta_l_b)
     return Wbeta_l_b

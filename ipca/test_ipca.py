@@ -77,7 +77,6 @@ PSF = PSF.reshape((2, -1))
 regr = IPCARegressor(n_factors=2, intercept=False)
 Gamma_New, Factor_New = regr.fit(P=data, PSF=PSF, refit=False)
 
-
 # Test nan observations
 regr = IPCARegressor(n_factors=1, intercept=True)
 data_nan = data.copy()
@@ -99,15 +98,14 @@ data_OOS = data[data[:, 1] == 1954, :]
 regr.fit(P=data_IS)
 Ypred = regr.predictOOS(P=data_OOS, mean_factor=True)
 
-
 # Test Walpha Bootstrap
 regr = IPCARegressor(n_factors=1, intercept=True)
 Gamma_New, Factor_New = regr.fit(P=data)
-pval = regr.BS_Walpha(ndraws=100)
+pval = regr.BS_Walpha(ndraws=10)
 print('p-value', pval)
 
 # Test Wbeta Bootstrap
 regr = IPCARegressor(n_factors=1, intercept=False)
 Gamma_New, Factor_New = regr.fit(P=data)
-pval = regr.BS_Wbeta(0, ndraws=100, n_jobs=-1)
+pval = regr.BS_Wbeta([0, 1], ndraws=10, n_jobs=-1)
 print('p-value', pval)
