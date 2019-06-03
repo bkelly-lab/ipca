@@ -457,7 +457,7 @@ class IPCARegressor:
         while((iter <= self.max_iter) and (tol_current > self.iter_tol)):
 
             if self.PSFcase:
-                Gamma_New, Factor_New = self._ALS_PFS_fit(Gamma_Old, W, X, P,
+                Gamma_New, Factor_New = self._ALS_PSF_fit(Gamma_Old, W, X, P,
                                                           PSF, val_obs, **kwds)
                 tol_current = np.max(np.abs(Gamma_New - Gamma_Old))
             else:
@@ -480,9 +480,9 @@ class IPCARegressor:
         return Gamma_New, Factor_New
 
 
-    def _ALS_PFS_fit(self, Gamma_Old, W, X, P, PSF, val_obs, n_jobs=1,
+    def _ALS_PSF_fit(self, Gamma_Old, W, X, P, PSF, val_obs, n_jobs=1,
                      backend="loky", **kwds):
-        """Alternating least squares procedure to fit params for PFS case
+        """Alternating least squares procedure to fit params for PSF case
 
         The alternating least squares procedure switches back and forth
         between evaluating the first order conditions for Gamma_Beta, and the
