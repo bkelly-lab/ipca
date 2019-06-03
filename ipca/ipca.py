@@ -1,10 +1,11 @@
+from sklearn.linear_model import ElasticNet
+from joblib import Parallel, delayed
+from numba import jit
 import numpy as np
 import scipy as sp
 import progressbar
 import warnings
-from numba import jit
 import time
-from joblib import Parallel, delayed
 
 class IPCARegressor:
     """
@@ -50,7 +51,8 @@ class IPCARegressor:
             if k != 'self':
                 setattr(self, k, v)
 
-    def fit(self, P=None, PSF=None, refit=False):
+
+    def fit(self, P=None, PSF=None, refit=False, **kwds):
         """
         Fits the regressor to the data using an alternating least squares
         scheme.
@@ -115,6 +117,8 @@ class IPCARegressor:
         # Unpack the Panel
         if not refit:
             X, W, val_obs = self._unpack_panel(P)
+        else:
+            P, X, W, val_obs = self.P, self.X, self.W, self.val_obs
 
         # Handle pre-specified factors
         if PSF is not None:
@@ -155,17 +159,13 @@ class IPCARegressor:
 
 
         # Run IPCA
-        if not refit:
-            Gamma, Factors = self._fit_ipca(X=X, W=W, PSF=PSF,
-                                            val_obs=val_obs)
-        else:
-            Gamma, Factors = self._fit_ipca(X=self.X, W=self.W, PSF=PSF,
-                                            val_obs=self.val_obs)
+        Gamma, Factors = self._fit_ipca(X, W, P, PSF, val_obs, **kwds)
 
         # Store estimates
         if self.PSFcase:
             if self.intercept and self.has_PSF:
-                PSF = np.concatenate((PSF, np.ones((1, len(self.dates)))), axis=0)
+                PSF = np.concatenate((PSF, np.ones((1, len(self.dates)))),
+                                     axis=0)
             elif self.intercept:
                 PSF = np.ones((1, len(self.dates)))
             if Factors is not None:
@@ -177,7 +177,11 @@ class IPCARegressor:
 
         # Save unpacked panel for Re-fitting
         if not refit:
-            self.PSF, self.X, self.W, self.val_obs = PSF, X, W, val_obs
+            self.P = P
+            self.PSF = PSF
+            self.X = X
+            self.W = W
+            self.val_obs = val_obs
 
         # Compute Goodness of Fit
         self.r2_total, self.r2_pred, self.r2_total_x, self.r2_pred_x = \
@@ -394,7 +398,7 @@ class IPCARegressor:
 
         return Ypred
 
-    def _fit_ipca(self, X=None, W=None, val_obs=None, PSF=None, quiet=False):
+    def _fit_ipca(self, X, W, P, PSF, val_obs, quiet=False, **kwds):
         """
         Fits the regressor to the data using an alternating least squares
         scheme.
@@ -406,16 +410,22 @@ class IPCARegressor:
 
         W : array_like of shape (L, L,T),
 
-        nan_mask : array, boolean
-            The value at nan_mask[n,t] is True if no nan values are contained
-            in Z[n,:,t] or Y[n,t] and False otherwise.
+        P: Panel of data. Each row corresponds to an observation (i, t). The
+            columns are ordered in the following manner:
+                COLUMN 1: entity id (i)
+                COLUMN 2: time index (t)
+                COLUMN 3: depdent variable Y(i,t)
+                COLUMN 4 and following: L characteristics
 
         PSF : optional, array-like of shape (M, T), i.e.
             pre-specified factors
 
+        val_obs: array-like
+            matrix of dimension (T), containting the number of non missing
+            observations at each point in time
+
         quiet   : optional, bool
             If true no text output will be produced
-
 
         Returns
         -------
@@ -447,12 +457,12 @@ class IPCARegressor:
         while((iter <= self.max_iter) and (tol_current > self.iter_tol)):
 
             if self.PSFcase:
-                Gamma_New, Factor_New = self._ALS_fit(Gamma_Old, W, X,
-                                                      val_obs, PSF=PSF)
+                Gamma_New, Factor_New = self._ALS_PFS_fit(Gamma_Old, W, X, P,
+                                                          PSF, val_obs, **kwds)
                 tol_current = np.max(np.abs(Gamma_New - Gamma_Old))
             else:
-                Gamma_New, Factor_New = self._ALS_fit(Gamma_Old, W, X,
-                                                      val_obs)
+                Gamma_New, Factor_New = self._ALS_fit(Gamma_Old, W, X, P,
+                                                      val_obs, **kwds)
                 tol_current_G = np.max(np.abs(Gamma_New - Gamma_Old))
                 tol_current_F = np.max(np.abs(Factor_New - Factor_Old))
                 tol_current = max(tol_current_G, tol_current_F)
@@ -470,96 +480,143 @@ class IPCARegressor:
         return Gamma_New, Factor_New
 
 
-    def _ALS_fit(self, Gamma_Old, W, X, val_obs, **kwargs):
-        """The alternating least squares procedure switches back and forth
+    def _ALS_PFS_fit(self, Gamma_Old, W, X, P, PSF, val_obs, n_jobs=1,
+                     backend="loky", **kwds):
+        """Alternating least squares procedure to fit params for PFS case
+
+        The alternating least squares procedure switches back and forth
         between evaluating the first order conditions for Gamma_Beta, and the
         factors until convergence is reached. This function carries out one
         complete update procedure and will need to be called repeatedly using
         the updated Gamma's and factors as inputs.
+
+        Parameters
+        ----------
+        Gamma_Old
+
+        Returns
+        -------
         """
+
         T = self.T
 
-        # Determine whether any per-specified factors were passed
-        if self.PSFcase:
-            PSF = kwargs.get("PSF")
-            K_PSF, _ = np.shape(PSF)
-
-        # Determine number of factors to be estimated
-        if self.PSFcase:
-            L, Ktilde = np.shape(Gamma_Old)
-            K = Ktilde - K_PSF
-        else:
-            L, K = np.shape(Gamma_Old)
-            Ktilde = K
+        # Determine nunmber of factors to be estimated
+        K_PSF, _ = np.shape(PSF)
+        L, Ktilde = np.shape(Gamma_Old)
+        K = Ktilde - K_PSF
 
         # ALS Step 1
-        F_New = np.nan
         if K > 0:
-            if self.PSFcase:
-                F_New = np.full((K, T), np.nan)
-                for t in range(T):
-                    m1 = Gamma_Old[:, :K].T.dot(W[:, :, t])\
-                        .dot(Gamma_Old[:, :K])
-                    m2 = Gamma_Old[:, :K].T.dot(X[:, t])-Gamma_Old[:, :K].T\
-                        .dot(W[:, :, t]).dot(Gamma_Old[:, K:Ktilde])\
-                        .dot(PSF[:, t])
-                    F_New[:, t] = np.squeeze(self._numba_solve(
-                                                    m1, m2.reshape((-1, 1))))
+
+            if n_jobs > 1:
+                F_New = Parallel(n_jobs=n_jobs, backend=backend)(
+                            delayed(_FT_PSFcase_fit)(
+                                Gamma_Old, W[:,:,t], X[:,t], PSF[:,t],
+                                K, Ktilde)
+                            for t in range(T))
+                F_New = np.stack(F_New, axis=1)
+
             else:
                 F_New = np.full((K, T), np.nan)
                 for t in range(T):
-                    m1 = Gamma_Old.T.dot(W[:, :, t]).dot(Gamma_Old)
-                    m2 = Gamma_Old.T.dot(X[:, t])
-                    F_New[:, t] = np.squeeze(self._numba_solve(
-                                                    m1, m2.reshape((-1, 1))))
+                    F_New[:,t] = _Ft_PSFcase_fit(Gamma_Old, W[:,:,t], X[:,t],
+                                                 PSF[:,t], K, Ktilde)
+
         else:
             F_New = None
 
-
         # ALS Step 2
-        Numer = self._numba_full((L*Ktilde, 1), 0.0)
-        Denom = self._numba_full((L*Ktilde, L*Ktilde), 0.0)
-        if self.PSFcase:
-            if K > 0:
-                for t in range(T):
-                    Numer += self._numba_kron(X[:, t].reshape((-1, 1)),
-                                            np.vstack(
-                                            (F_New[:, t].reshape((-1, 1)),
-                                             PSF[:, t].reshape((-1, 1)))))\
-                                             * val_obs[t]
-                    Denom_temp = np.vstack((F_New[:, t].reshape((-1, 1)),
-                                           PSF[:, t].reshape((-1, 1))))
-                    Denom += self._numba_kron(W[:, :, t], Denom_temp.dot(Denom_temp.T)
-                                              * val_obs[t])
-            else:
-                for t in range(T):
-                    Numer += self._numba_kron(X[:, t].reshape((-1, 1)),
-                                              PSF[:, t].reshape((-1, 1)))\
-                                              * val_obs[t]
-                    Denom += self._numba_kron(W[:, :, t],
-                                              PSF[:, t].reshape((-1, 1))
-                                              .dot(PSF[:, t].reshape((-1, 1)).T)) * val_obs[t]
+
+        # join observed factors with latent factors and map to panel
+        if F_New is None:
+            F = PSF
         else:
-            for t in range(T):
+            F = np.vstack((F_New, PSF))
+        F = F[:,np.unique(P[:,1], return_inverse=True)[1]]
 
-                Numer += self._numba_kron(X[:, t].reshape((-1, 1)),
-                                          F_New[:, t].reshape((-1, 1)))\
-                                          * val_obs[t]
-                Denom += self._numba_kron(W[:, :, t],
-                                          F_New[:, t].reshape((-1, 1))
-                                          .dot(F_New[:, t].reshape((1, -1)))) \
-                                          * val_obs[t]
+        # interact factors and characteristics
+        ZkF = np.hstack((F[k,:,None] * P[:,3:] for k in range(Ktilde)))
 
-        Gamma_New = self._numba_solve(Denom, Numer).reshape((L, Ktilde))
+        # fit regression for Gamma
+        Gamma_New = _Gamma_fit(ZkF, P[:,2], **kwds)
+        Gamma_New = Gamma_New.reshape((Ktilde, L)).T
+
+        # condition checks
 
         # Enforce Orthogonality of Gamma_Beta and factors F
         if K > 0:
-            R1 = self._numba_chol(Gamma_New[:, :K].T.dot(Gamma_New[:, :K])).T
-            R2, _, _ = self._numba_svd(R1.dot(F_New).dot(F_New.T).dot(R1.T))
-            Gamma_New[:, :K] = self._numba_lstsq(Gamma_New[:, :K].T,
-                                                 R1.T)[0]\
-                .dot(R2)
-            F_New = self._numba_solve(R2, R1.dot(F_New))
+            R1 = _numba_chol(Gamma_New[:, :K].T.dot(Gamma_New[:, :K])).T
+            R2, _, _ = _numba_svd(R1.dot(F_New).dot(F_New.T).dot(R1.T))
+            Gamma_New[:, :K] = _numba_lstsq(Gamma_New[:, :K].T,
+                                            R1.T)[0].dot(R2)
+            F_New = _numba_solve(R2, R1.dot(F_New))
+
+        # Enforce sign convention for Gamma_Beta and F_New
+        if K > 0:
+            sg = np.sign(np.mean(F_New, axis=1)).reshape((-1, 1))
+            sg[sg == 0] = 1
+            Gamma_New[:, :K] = np.multiply(Gamma_New[:, :K], sg.T)
+            F_New = np.multiply(F_New, sg)
+
+        return Gamma_New, F_New
+
+
+    def _ALS_fit(self, Gamma_Old, W, X, val_obs, PSF=None, n_jobs=1,
+                 backend="loky", **kwds):
+        """Alternating least squares procedure to fit params
+
+        The alternating least squares procedure switches back and forth
+        between evaluating the first order conditions for Gamma_Beta, and the
+        factors until convergence is reached. This function carries out one
+        complete update procedure and will need to be called repeatedly using
+        the updated Gamma's and factors as inputs.
+
+        Parameters
+        ----------
+        Gamma_Old
+
+        Returns
+        -------
+        """
+
+        T = self.T
+
+        # Determine number of factors to be estimated
+        L, K = np.shape(Gamma_Old)
+        Ktilde = K
+
+        # ALS Step 1
+        if K > 0:
+
+            if n_jobs > 1:
+                F_New = Parallel(n_jobs=n_jobs, backend=backend)(
+                            delayed(_Ft_fit)(
+                                Gamma_Old, W[:,:,t], X[:,t])
+                            for t in range(T))
+                F_New = np.stack(F_New, axis=1)
+
+            else:
+                F_New = np.full((K, T), np.nan)
+                for t in range(T):
+                    F_New[:,t] = _Ft_fit(Gamma_Old, W[:,:,t], X[:,t])
+
+        else:
+            F_New = None
+
+        # ALS Step 2
+
+        # map factors to panel
+        F = F_New[:,np.unique(P[:,1], return_inverse=True)[1]]
+
+        # condition checks
+
+        # interact factors and characteristics
+        ZkF = np.hstack((F[k,:,None] * P[:,3:] for k in range(Ktilde)))
+
+        # fit regression for Gamma
+        Gamma_New = _Gamma_fit(ZkF, P[:,2], **kwds)
+        print(Gamma_New)
+        Gamma_New = Gamma_New.reshape((Ktilde, L)).T
 
         # Enforce sign convention for Gamma_Beta and F_New
         if K > 0:
@@ -687,35 +744,65 @@ class IPCARegressor:
 
         return r2_total, r2_pred, r2_total_x, r2_pred_x
 
-    @staticmethod
-    @jit(nopython=True)
-    def _numba_solve(m1, m2):
-        return np.linalg.solve(np.ascontiguousarray(m1), np.ascontiguousarray(m2))
 
-    @staticmethod
-    @jit(nopython=True)
-    def _numba_lstsq(m1, m2):
-        return np.linalg.lstsq(np.ascontiguousarray(m1), np.ascontiguousarray(m2))
+def _Ft_PSFcase_fit(Gamma_Old, W_t, X_t, PSF_t, K, Ktilde):
+    """helper func to parallelize PSFcase F ALS fit"""
 
-    @staticmethod
-    @jit(nopython=True)
-    def _numba_kron(m1, m2):
-        return np.kron(np.ascontiguousarray(m1), np.ascontiguousarray(m2))
+    m1 = Gamma_Old[:,:K].T.dot(W_t).dot(Gamma_Old[:,:K])
+    m2 = Gamma_Old[:,:K].T.dot(X_t)
+    m2 -= Gamma_Old[:,:K].T.dot(W_t).dot(Gamma_Old[:,K:Ktilde]).dot(PSF_t)
 
-    @staticmethod
-    @jit(nopython=True)
-    def _numba_chol(m1):
-        return np.linalg.cholesky(np.ascontiguousarray(m1))
+    return np.squeeze(_numba_solve(m1, m2.reshape((-1, 1))))
 
-    @staticmethod
-    @jit(nopython=True)
-    def _numba_svd(m1):
-        return np.linalg.svd(np.ascontiguousarray(m1))
 
-    @staticmethod
-    @jit(nopython=True)
-    def _numba_full(m1, m2):
-        return np.full(m1, m2)
+def _Ft_fit(Gamma_Old, W_t, X_t):
+    """helper func to parallelize base F ALS fit"""
+
+    m1 = Gamma_Old.T.dot(W_t).dot(Gamma_Old)
+    m2 = Gamma_Old.T.dot(X_t)
+
+    return np.squeeze(_numba_solve(m1, m2.reshape((-1, 1))))
+
+
+def _Gamma_fit(ZkF, y, alpha=0., fit_intercept=False, **kwds):
+    """helper function for estimating vectorized Gamma"""
+
+    # elastic net fit
+    if alpha:
+        mod = ElasticNet(alpha=alpha, fit_intercept=fit_intercept, **kwds)
+        mod.fit(ZkF, y)
+        gamma = mod.coef_
+
+    # OLS fit
+    else:
+        gamma = _numba_lstsq(ZkF, y)[0]
+
+    return gamma
+
+
+@jit(nopython=True)
+def _numba_solve(m1, m2):
+    return np.linalg.solve(np.ascontiguousarray(m1), np.ascontiguousarray(m2))
+
+@jit(nopython=True)
+def _numba_lstsq(m1, m2):
+    return np.linalg.lstsq(np.ascontiguousarray(m1), np.ascontiguousarray(m2))
+
+@jit(nopython=True)
+def _numba_kron(m1, m2):
+    return np.kron(np.ascontiguousarray(m1), np.ascontiguousarray(m2))
+
+@jit(nopython=True)
+def _numba_chol(m1):
+    return np.linalg.cholesky(np.ascontiguousarray(m1))
+
+@jit(nopython=True)
+def _numba_svd(m1):
+    return np.linalg.svd(np.ascontiguousarray(m1))
+
+@jit(nopython=True)
+def _numba_full(m1, m2):
+    return np.full(m1, m2)
 
 
 def _BS_Walpha_sub(self, n, d):
