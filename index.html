@@ -155,13 +155,13 @@ Principal Components Analysis framework by Kelly, Pruitt, Su (2017)
 </div>
 <span class="target" id="module-ipca"></span><dl class="class">
 <dt id="ipca.IPCARegressor">
-<em class="property">class </em><code class="descclassname">ipca.</code><code class="descname">IPCARegressor</code><span class="sig-paren">(</span><em>n_factors=1</em>, <em>intercept=False</em>, <em>max_iter=10000</em>, <em>iter_tol=1e-05</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">ipca.</code><code class="sig-name descname">IPCARegressor</code><span class="sig-paren">(</span><em class="sig-param">n_factors=1</em>, <em class="sig-param">intercept=False</em>, <em class="sig-param">max_iter=10000</em>, <em class="sig-param">iter_tol=1e-05</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>This class implements the IPCA algorithm by Kelly, Pruitt, Su (2017).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>n_factors</strong> (<em>int, default=1</em>) – The number of latent factors to estimate. Note, the number of
+<li><p><strong>n_factors</strong> (<em>int, default=1</em>) – The total number of factors to estimate. Note, the number of
 estimated factors is automatically reduced by the number of
 pre-specified factors. For example, if n_factors = 2 and one
 pre-specified factor is passed, then IPCARegressor will estimate
@@ -169,20 +169,22 @@ one factor estimated in addition to the pre-specified factor.</p></li>
 <li><p><strong>intercept</strong> (<em>boolean, default=False</em>) – Determines whether the model is estimated with or without an intercept</p></li>
 <li><p><strong>max_iter</strong> (<em>int, default=10000</em>) – Maximum number of alternating least squares updates before the
 estimation is stopped</p></li>
-<li><p><strong>iter_tol</strong> (<em>float, default=10e-6</em>) – Tolerance threshold for stopping the alternating least squares procedure</p></li>
+<li><p><strong>iter_tol</strong> (<em>float, default=10e-6</em>) – Tolerance threshold for stopping the alternating least squares
+procedure</p></li>
 </ul>
 </dd>
 </dl>
 <dl class="method">
 <dt id="ipca.IPCARegressor.BS_Walpha">
-<code class="descname">BS_Walpha</code><span class="sig-paren">(</span><em>ndraws=1000</em>, <em>n_jobs=1</em>, <em>backend='loky'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.BS_Walpha"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.BS_Walpha" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname">BS_Walpha</code><span class="sig-paren">(</span><em class="sig-param">ndraws=1000</em>, <em class="sig-param">n_jobs=1</em>, <em class="sig-param">backend='loky'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.BS_Walpha"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.BS_Walpha" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bootstrap inference on the hypothesis Gamma_alpha = 0</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>ndraws</strong> (<em>integer, default=1000</em>) – Number of bootstrap draws and re-estimations to be performed</p></li>
 <li><p><strong>backend</strong> (<em>optional</em>) – Value is either ‘loky’ or ‘multiprocessing’</p></li>
-<li><p><strong>n_jobs</strong> (<em>integer</em>) – Number of workers to be used. If -1, all available workers are used.</p></li>
+<li><p><strong>n_jobs</strong> (<em>integer</em>) – Number of workers to be used. If -1, all available workers are
+used.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
@@ -196,13 +198,15 @@ estimation is stopped</p></li>
 
 <dl class="method">
 <dt id="ipca.IPCARegressor.BS_Wbeta">
-<code class="descname">BS_Wbeta</code><span class="sig-paren">(</span><em>l</em>, <em>ndraws=1000</em>, <em>n_jobs=1</em>, <em>backend='loky'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.BS_Wbeta"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.BS_Wbeta" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname">BS_Wbeta</code><span class="sig-paren">(</span><em class="sig-param">l</em>, <em class="sig-param">ndraws=1000</em>, <em class="sig-param">n_jobs=1</em>, <em class="sig-param">backend='loky'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.BS_Wbeta"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.BS_Wbeta" title="Permalink to this definition">¶</a></dt>
 <dd><p>Test of instrument significance.
 Bootstrap inference on the hypothesis  l-th column of Gamma_beta = 0.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>l</strong> (<em>integer</em>) – Position of the characteristics for which the bootstrap is to be carried out. For example, if there are 10 characteristics, l is in the range 0 to 9 (left-/right-inclusive).</p></li>
+<li><p><strong>l</strong> (<em>integer</em>) – Position of the characteristics for which the bootstrap is to be
+carried out. For example, if there are 10 characteristics, l is in
+the range 0 to 9 (left-/right-inclusive).</p></li>
 <li><p><strong>ndraws</strong> (<em>integer, default=1000</em>) – Number of bootstrap draws and re-estimations to be performed</p></li>
 <li><p><strong>n_jobs</strong> (<em>integer</em>) – Number of workers to be used for multiprocessing.
 If -1, all available Workers are used.</p></li>
@@ -220,13 +224,13 @@ If -1, all available Workers are used.</p></li>
 
 <dl class="method">
 <dt id="ipca.IPCARegressor.fit">
-<code class="descname">fit</code><span class="sig-paren">(</span><em>P=None</em>, <em>PSF=None</em>, <em>refit=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.fit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.fit" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname">fit</code><span class="sig-paren">(</span><em class="sig-param">Panel=None</em>, <em class="sig-param">PSF=None</em>, <em class="sig-param">refit=False</em>, <em class="sig-param">alpha=0.0</em>, <em class="sig-param">l1_ratio=1.0</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.fit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.fit" title="Permalink to this definition">¶</a></dt>
 <dd><p>Fits the regressor to the data using an alternating least squares
 scheme.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>P</strong> (<em>numpy array</em>) – Panel of stacked data. Each row corresponds to an observation
+<li><p><strong>Panel</strong> (<em>numpy array</em>) – Panel of stacked data. Each row corresponds to an observation
 (i, t) where i denotes the entity index and t denotes
 the time index. The panel may be unbalanced. The number of unique
 entities is n_samples, the number of unique dates is T, and
@@ -244,6 +248,9 @@ The columns of the panel are organized in the following order:</p>
 the function will skip unpacking the panel into a tensor and
 instead use the stored values from the previous fit. Note, it is
 still necessary to pass the previously used P.</p></li>
+<li><p><strong>alpha</strong> (<em>scalar</em>) – Regularizing constant for Gamma estimation.  If this is set to
+zero then the estimation defaults to non-regularized.</p></li>
+<li><p><strong>l1_ratio</strong> (<em>scalar</em>) – Ratio of l1 and l2 penalties for elastic net Gamma fit.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
@@ -252,8 +259,8 @@ still necessary to pass the previously used P.</p></li>
 mapping between characteristics and factors loadings. If there
 are M many pre-specified factors in the model then the
 matrix returned is of dimension (L, (n_factors+M)).
-If an intercept is included in the model, its loadings are returned
-in the last column of Gamma.</p></li>
+If an intercept is included in the model, its loadings are
+returned in the last column of Gamma.</p></li>
 <li><p><strong>Factors</strong> (<em>numpy array</em>) – Array with dimensions (n_factors, T) containing the estimated
 factors. If pre-specified factors were passed the returned
 array is of dimension ((n_factors - M), T),
@@ -267,12 +274,12 @@ top of the pre-specified ones.</p></li>
 
 <dl class="method">
 <dt id="ipca.IPCARegressor.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>P=None</em>, <em>mean_factor=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.predict" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname">predict</code><span class="sig-paren">(</span><em class="sig-param">Panel=None</em>, <em class="sig-param">mean_factor=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Predicts fitted values for a previously fitted regressor</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>P</strong> (<em>numpy array</em>) – Panel of stacked data. Each row corresponds to an observation
+<li><p><strong>Panel</strong> (<em>numpy array</em>) – Panel of stacked data. Each row corresponds to an observation
 (i, t) where i denotes the entity index and t denotes
 the time index. The panel may be unbalanced. If an observation
 contains missing data NaN will be returned. Note that the
@@ -302,12 +309,12 @@ characteristics information.</p>
 
 <dl class="method">
 <dt id="ipca.IPCARegressor.predictOOS">
-<code class="descname">predictOOS</code><span class="sig-paren">(</span><em>P=None</em>, <em>mean_factor=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.predictOOS"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.predictOOS" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname">predictOOS</code><span class="sig-paren">(</span><em class="sig-param">Panel=None</em>, <em class="sig-param">mean_factor=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#IPCARegressor.predictOOS"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.IPCARegressor.predictOOS" title="Permalink to this definition">¶</a></dt>
 <dd><p>Predicts time t+1 observation using an out-of-sample design.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>P</strong> (<em>numpy array</em>) – Panel of stacked data. Each row corresponds to an observation
+<li><p><strong>Panel</strong> (<em>numpy array</em>) – Panel of stacked data. Each row corresponds to an observation
 (i,t) where i denotes the entity index and t denotes
 the time index. All data must correspond to time t, i.e. all
 observations occur on the same date.
