@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='ipca',
-      version='0.5.9.2',
+      version='0.6.0',
       description='Implements the IPCA method of Kelly, Pruitt, Su (2017)',
       url='https://github.com/bkelly-lab/ipca',
       author='Matthias Buechner',

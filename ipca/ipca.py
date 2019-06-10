@@ -592,7 +592,7 @@ class IPCARegressor:
             if PSF is None:
                 if n_jobs > 1:
                     F_New = Parallel(n_jobs=n_jobs, backend=backend)(
-                                delayed(_FT_fit)(
+                                delayed(_Ft_fit)(
                                     Gamma_Old, W[:,:,t], X[:,t])
                                 for t in range(T))
                     F_New = np.stack(F_New, axis=1)
@@ -606,7 +606,7 @@ class IPCARegressor:
             else:
                 if n_jobs > 1:
                     F_New = Parallel(n_jobs=n_jobs, backend=backend)(
-                                delayed(_FT_PSF_fit)(
+                                delayed(_Ft_PSF_fit)(
                                     Gamma_Old, W[:,:,t], X[:,t], PSF[:,t],
                                     K, Ktilde)
                                 for t in range(T))
