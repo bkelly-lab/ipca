@@ -101,7 +101,7 @@ Ypred = regr.predictOOS(Panel=data_OOS, mean_factor=True)
 # Test Walpha Bootstrap
 regr = IPCARegressor(n_factors=1, intercept=True)
 Gamma_New, Factor_New = regr.fit(Panel=data)
-pval = regr.BS_Walpha(ndraws=10)
+pval = regr.BS_Walpha(ndraws=10, n_jobs=-1)
 print('p-value', pval)
 
 # Test Wbeta Bootstrap

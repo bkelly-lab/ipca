@@ -352,7 +352,7 @@ class IPCARegressor:
         print("Done!")
 
         pval = np.sum(Wbeta_l_b > Wbeta_l)/ndraws
-        print(Wbeta_l_b, Wbeta_l)
+        # print(Wbeta_l_b, Wbeta_l)
 
         return pval
 
@@ -811,14 +811,22 @@ def _Gamma_panel_fit(F_New, Panel, PSF, L, Ktilde, alpha, l1_ratio, **kwargs):
 def _BS_Walpha_sub(model, n, d):
     X_b = np.full((model.L, model.T), np.nan)
     np.random.seed(n)
-    for t in range(model.T):
-        d_temp = np.random.standard_t(5)*d[:,np.random.randint(0,high=model.T)]
-        X_b[:, t] = model.W[:, :, t].dot(model.Gamma_Est[:, :-1])\
-            .dot(model.Factors_Est[:-1, t]) + d_temp
+
 
     # Re-estimate unrestricted model
-    Gamma, Factors = model._fit_ipca(X=X_b, W=model.W, val_obs=model.val_obs,
-                                     PSF=model.PSF, quiet=True)
+    Gamma = None
+    while Gamma is None:
+        try:
+            for t in range(model.T):
+                d_temp = np.random.standard_t(5)*d[:,np.random.randint(0,high=model.T)]
+                X_b[:, t] = model.W[:, :, t].dot(model.Gamma_Est[:, :-1])\
+                    .dot(model.Factors_Est[:-1, t]) + d_temp
+            Gamma, Factors = model._fit_ipca(X=X_b, W=model.W, val_obs=model.val_obs,
+                                             PSF=model.PSF, quiet=True)
+        except np.linalg.LinAlgError:
+            warnings.warn("Encountered singularity in bootstrap iteration. Observation discarded.")
+            pass
+
 
     # Compute and store Walpha_b
     Walpha_b = Gamma[:, -1].T.dot(Gamma[:, -1])
