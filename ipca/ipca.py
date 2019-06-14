@@ -840,14 +840,21 @@ def _BS_Wbeta_sub(model, n, d, l):
     #Modify Gamma_beta such that its l-th row is zero
     Gamma_beta_l = np.copy(model.Gamma_Est)
     Gamma_beta_l[l, :] = 0
-    for t in range(model.T):
-        d_temp = np.random.standard_t(5)*d[:,np.random.randint(0,high=model.T)]
-        X_b[:, t] = model.W[:, :, t].dot(Gamma_beta_l)\
-            .dot(model.Factors_Est[:, t]) + d_temp
 
-    # Re-estimate unrestricted model
-    Gamma, Factors = model._fit_ipca(X=X_b, W=model.W, val_obs=model.val_obs,
-                                     PSF=model.PSF, quiet=True)
+    Gamma = None
+    while Gamma is None:
+        try:
+            for t in range(model.T):
+                d_temp = np.random.standard_t(5)*d[:,np.random.randint(0,high=model.T)]
+                X_b[:, t] = model.W[:, :, t].dot(Gamma_beta_l)\
+                    .dot(model.Factors_Est[:, t]) + d_temp
+
+            # Re-estimate unrestricted model
+            Gamma, Factors = model._fit_ipca(X=X_b, W=model.W, val_obs=model.val_obs,
+                                             PSF=model.PSF, quiet=True)
+        except np.linalg.LinAlgError:
+            warnings.warn("Encountered singularity in bootstrap iteration. Observation discarded.")
+            pass
 
     # Compute and store Walpha_b
     Wbeta_l_b = Gamma[l, :].dot(Gamma[l, :].T)
