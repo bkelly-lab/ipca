@@ -111,9 +111,18 @@ pval = regr.BS_Wbeta([0, 1], ndraws=10, n_jobs=-1)
 print('p-value', pval)
 
 # Test with regularization
-regr = IPCARegressor(n_factors=2, intercept=False)
-Gamma_New, Factor_New = regr.fit(Panel=data, alpha=0.5)
-Gamma_New, Factor_New = regr.fit(Panel=data, alpha=0.5, l1_ratio=0.5)
-Gamma_New, Factor_New = regr.fit(Panel=data, PSF=PSF, alpha=0.5)
+regr = IPCARegressor(n_factors=2, alpha=0.5, intercept=False)
+Gamma_New, Factor_New = regr.fit(Panel=data)
+regr = IPCARegressor(n_factors=2, alpha=0.5, l1_ratio=0.5, intercept=False)
+Gamma_New, Factor_New = regr.fit(Panel=data)
+regr = IPCARegressor(n_factors=2, alpha=0.5, intercept=False)
+Gamma_New, Factor_New = regr.fit(Panel=data, PSF=PSF)
 regr = IPCARegressor(n_factors=1, intercept=True)
-Gamma_New, Factor_New = regr.fit(Panel=data, alpha=0.5)
+Gamma_New, Factor_New = regr.fit(Panel=data)
+
+# Test regularization path
+regr = IPCARegressor(n_factors=2)
+cvmse = regr.fit_path(Panel=data)
+cvmse = regr.fit_path(Panel=data, alpha_l=np.array([0., 0.5, 1.]))
+cvmse = regr.fit_path(Panel=data, PSF=PSF)
+cvmse = regr.fit_path(Panel=data, PSF=PSF, alpha_l=np.array([0., 0.5, 1.]))

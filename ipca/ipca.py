@@ -209,15 +209,30 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
         self.r2_total, self.r2_pred, self.r2_total_x, self.r2_pred_x = \
             self._R2_comps(Panel=Panel)
 
-        return self.Gamma_Est, self.Factor_Est
+        return self.Gamma_Est, self.Factors_Est
 
 
-    def fit_path(self, alpha_l=None, n_splits=10, split_method=GroupKFold,
-                 n_jobs=1, backend="loky", **kwargs):
+    def fit_path(self, Panel=None, PSF=None, alpha_l=None, n_splits=10,
+                 split_method=GroupKFold, n_jobs=1, backend="loky", **kwargs):
         """Fit a path of elastic net fits for various regularizing constants
 
         Parameters
         ----------
+        Panel :  numpy array
+            Panel of stacked data. Each row corresponds to an observation
+            (i, t) where i denotes the entity index and t denotes
+            the time index. The panel may be unbalanced. The number of unique
+            entities is n_samples, the number of unique dates is T, and
+            the number of characteristics used as instruments is L.
+            The columns of the panel are organized in the following order:
+
+            - Column 1: entity id (i)
+            - Column 2: time index (t)
+            - Column 3: dependent variable corresponding to observation (i,t)
+            - Column 4 to column 4+L: characteristics.
+
+        PSF : numpy array, optional
+            Set of pre-specified factors as matrix of dimension (M, T)
         alpha_l : iterable or None
             list of regularizing constants to use for path
         n_splits : scalar
@@ -236,22 +251,31 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
             constants and C is the number of CV partitions
         """
 
+        # Check panel input
+        if Panel is None:
+            raise ValueError('Must pass panel input data.')
+        else:
+            # remove panel rows containing missing obs
+            Panel = Panel[~np.any(np.isnan(Panel), axis=1)]
+
         # init alphas
         if alpha_l is None:
-            alpha_l = np.linspace(0.01, 1., 100)
+            alpha_l = np.linspace(0.0, 1., 100)
 
         # run cross-validation
         if n_jobs > 1:
             cvmse = Parallel(n_jobs=n_jobs, backend=backend)(
-                        delayed(_fit_cv)
-                        self, n_splits, split_method, alpha)
+                        delayed(_fit_cv)(
+                        self, Panel, PSF, n_splits, split_method, alpha,
+                        **kwargs)
                         for alpha in alpha_l)
         else:
-            cvmse = [_fit_cv(self, n_splits, split_method, alpha)
+            cvmse = [_fit_cv(self, Panel, PSF, n_splits, split_method, alpha,
+                             **kwargs)
                      for alpha in alpha_l]
 
-        cvmse = np.stack(cvmse, axis=1)
-        cvmse = np.hstack((alpha_l, cvmse))
+        cvmse = np.stack(cvmse)
+        cvmse = np.hstack((alpha_l[:,None], cvmse))
 
         return cvmse
 
@@ -862,13 +886,27 @@ def _Gamma_panel_fit(F_New, Panel, PSF, L, Ktilde, alpha, l1_ratio, **kwargs):
     return gamma
 
 
-def _fit_cv(model, n_splits, split_method, alpha):
+def _fit_cv(model, Panel, PSF, n_splits, split_method, alpha, **kwargs):
     """inner function for fit_path doing CV
 
     Parameters
     ----------
     model : IPCA model instance
-        contains the params and current data
+        contains the params
+    Panel :  numpy array
+        Panel of stacked data. Each row corresponds to an observation
+        (i, t) where i denotes the entity index and t denotes
+        the time index. The panel may be unbalanced. The number of unique
+        entities is n_samples, the number of unique dates is T, and
+        the number of characteristics used as instruments is L.
+        The columns of the panel are organized in the following order:
+
+        - Column 1: entity id (i)
+        - Column 2: time index (t)
+        - Column 3 to column 3+L: characteristics.
+
+    PSF : numpy array, optional
+        Set of pre-specified factors as matrix of dimension (M, T)
     n_splits : scalar
         number of CV partitions
     split_method : sklearn cross-validation generator factory
@@ -889,26 +927,32 @@ def _fit_cv(model, n_splits, split_method, alpha):
     # build iterator
     mse_l = []
     split = split_method(n_splits=n_splits)
-    for train, test in split.split(model.Panel, groups=model.Panel[:,1]):
+
+    full_tind = np.unique(Panel[:,1])
+
+    for train, test in split.split(Panel, groups=Panel[:,0]):
 
         # build partitioned model
-        train_Panel = model.Panel[train,:]
-        test_Panel = model.Panel[test,:]
-        if model.PSF:
-
-        else:
+        train_Panel = Panel[train,:]
+        test_Panel = Panel[test,:]
+        if PSF is None:
             train_PSF = None
-            test_PSF = None
+        else:
+            train_tind = np.unique(train_Panel[:,1])
+            train_tind = np.where(np.isin(full_tind, train_tind))[0]
+            train_PSF = PSF[:,train_tind]
 
         # init new training model
         params = model.get_params()
         params["alpha"] = alpha
-        train_IPCA = IPCA(**params)
-        train_IPCA = train_IPCA.fit(train_Panel, train_PSF)
+        train_IPCA = IPCARegressor(**params)
+        train_IPCA.fit(train_Panel, train_PSF, **kwargs)
 
         # get MSE
-        test_pred = train_IPCA.predict(test_Panel, mean_factor=True)
+        test_pred = train_IPCA.predict(np.delete(test_Panel, 2, axis=1),
+                                       mean_factor=True)
         mse = np.sum(np.square(test_Panel[:,2] - test_pred))
+        mse /= test_pred.shape[0]
         mse_l.append(mse)
 
     return np.array(mse_l)
