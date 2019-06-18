@@ -1,3 +1,5 @@
+from sklearn.base import BaseEstimator, RegressorMixin
+from sklearn.model_selection import GroupKFold
 from sklearn.linear_model import ElasticNet
 from joblib import Parallel, delayed
 from numba import jit
@@ -7,7 +9,7 @@ import progressbar
 import warnings
 import time
 
-class IPCARegressor:
+class IPCARegressor(BaseEstimator, RegressorMixin):
     """
     This class implements the IPCA algorithm by Kelly, Pruitt, Su (2017).
 
@@ -31,10 +33,25 @@ class IPCARegressor:
     iter_tol : float, default=10e-6
         Tolerance threshold for stopping the alternating least squares
         procedure
+
+    alpha : scalar
+        Regularizing constant for Gamma estimation.  If this is set to
+        zero then the estimation defaults to non-regularized.
+
+    l1_ratio : scalar
+        Ratio of l1 and l2 penalties for elastic net Gamma fit.
+
+    n_jobs : scalar
+        number of jobs for F step estimation in ALS, if set to one no
+        parallelization is done
+
+    backend : str
+        label for Joblib backend used for F step in ALS
     """
 
     def __init__(self, n_factors=1, intercept=False, max_iter=10000,
-                 iter_tol=10e-6):
+                 iter_tol=10e-6, alpha=0., l1_ratio=1., n_jobs=1,
+                 backend="loky"):
 
         # paranoid parameter checking to make it easier for users to know when
         # they have gone awry and to make it safe to assume some variables can
@@ -53,8 +70,7 @@ class IPCARegressor:
                 setattr(self, k, v)
 
 
-    def fit(self, Panel=None, PSF=None, refit=False, alpha=0., l1_ratio=1.,
-            **kwargs):
+    def fit(self, Panel=None, PSF=None, refit=False, **kwargs):
         """
         Fits the regressor to the data using an alternating least squares
         scheme.
@@ -83,13 +99,6 @@ class IPCARegressor:
             instead use the stored values from the previous fit. Note, it is
             still necessary to pass the previously used P.
 
-        alpha : scalar
-            Regularizing constant for Gamma estimation.  If this is set to
-            zero then the estimation defaults to non-regularized.
-
-        l1_ratio : scalar
-            Ratio of l1 and l2 penalties for elastic net Gamma fit.
-
         Returns
         -------
 
@@ -109,6 +118,7 @@ class IPCARegressor:
             top of the pre-specified ones.
 
         """
+
         # Check re-fitting is valid
         if refit:
             try:
@@ -169,7 +179,8 @@ class IPCARegressor:
 
         # Run IPCA
         Gamma, Factors = self._fit_ipca(X, W, val_obs, Panel=Panel, PSF=PSF,
-                                        alpha=alpha, l1_ratio=l1_ratio,
+                                        alpha=self.alpha, l1_ratio=self.l1_ratio,
+                                        n_jobs=self.n_jobs, backend=self.backend,
                                         **kwargs)
 
         # Store estimates
@@ -198,7 +209,51 @@ class IPCARegressor:
         self.r2_total, self.r2_pred, self.r2_total_x, self.r2_pred_x = \
             self._R2_comps(Panel=Panel)
 
-        return self.Gamma_Est, self.Factors_Est
+        return self.Gamma_Est, self.Factor_Est
+
+
+    def fit_path(self, alpha_l=None, n_splits=10, split_method=GroupKFold,
+                 n_jobs=1, backend="loky", **kwargs):
+        """Fit a path of elastic net fits for various regularizing constants
+
+        Parameters
+        ----------
+        alpha_l : iterable or None
+            list of regularizing constants to use for path
+        n_splits : scalar
+            number of CV partitions
+        split_method : sklearn cross-validation generator factory
+            method to generate CV partitions
+        n_jobs : scalar
+            number of jobs for parallel CV estimation
+        backend : str
+            label for joblib backend
+
+        Returns
+        -------
+        cvmse : numpy matrix
+            array of dim (P x (C + 1)) where P is the number of reg
+            constants and C is the number of CV partitions
+        """
+
+        # init alphas
+        if alpha_l is None:
+            alpha_l = np.linspace(0.01, 1., 100)
+
+        # run cross-validation
+        if n_jobs > 1:
+            cvmse = Parallel(n_jobs=n_jobs, backend=backend)(
+                        delayed(_fit_cv)
+                        self, n_splits, split_method, alpha)
+                        for alpha in alpha_l)
+        else:
+            cvmse = [_fit_cv(self, n_splits, split_method, alpha)
+                     for alpha in alpha_l]
+
+        cvmse = np.stack(cvmse, axis=1)
+        cvmse = np.hstack((alpha_l, cvmse))
+
+        return cvmse
 
 
     def predict(self, Panel=None, mean_factor=False):
@@ -710,7 +765,6 @@ class IPCARegressor:
         return r2_total, r2_pred, r2_total_x, r2_pred_x
 
 
-
 def _Ft_fit(Gamma_Old, W_t, X_t):
     """helper func to parallelize F ALS fit"""
 
@@ -808,10 +862,61 @@ def _Gamma_panel_fit(F_New, Panel, PSF, L, Ktilde, alpha, l1_ratio, **kwargs):
     return gamma
 
 
+def _fit_cv(model, n_splits, split_method, alpha):
+    """inner function for fit_path doing CV
+
+    Parameters
+    ----------
+    model : IPCA model instance
+        contains the params and current data
+    n_splits : scalar
+        number of CV partitions
+    split_method : sklearn cross-validation generator factory
+        method to generate CV partitions
+    alpha : scalar
+        regularizing constant for current step in elastic-net path
+
+    Returns
+    -------
+    mse : array
+        array of MSEs for each CV partition
+
+    Notes
+    -----
+    Groups are defined by firms
+    """
+
+    # build iterator
+    mse_l = []
+    split = split_method(n_splits=n_splits)
+    for train, test in split.split(model.Panel, groups=model.Panel[:,1]):
+
+        # build partitioned model
+        train_Panel = model.Panel[train,:]
+        test_Panel = model.Panel[test,:]
+        if model.PSF:
+
+        else:
+            train_PSF = None
+            test_PSF = None
+
+        # init new training model
+        params = model.get_params()
+        params["alpha"] = alpha
+        train_IPCA = IPCA(**params)
+        train_IPCA = train_IPCA.fit(train_Panel, train_PSF)
+
+        # get MSE
+        test_pred = train_IPCA.predict(test_Panel, mean_factor=True)
+        mse = np.sum(np.square(test_Panel[:,2] - test_pred))
+        mse_l.append(mse)
+
+    return np.array(mse_l)
+
+
 def _BS_Walpha_sub(model, n, d):
     X_b = np.full((model.L, model.T), np.nan)
     np.random.seed(n)
-
 
     # Re-estimate unrestricted model
     Gamma = None
@@ -840,14 +945,21 @@ def _BS_Wbeta_sub(model, n, d, l):
     #Modify Gamma_beta such that its l-th row is zero
     Gamma_beta_l = np.copy(model.Gamma_Est)
     Gamma_beta_l[l, :] = 0
-    for t in range(model.T):
-        d_temp = np.random.standard_t(5)*d[:,np.random.randint(0,high=model.T)]
-        X_b[:, t] = model.W[:, :, t].dot(Gamma_beta_l)\
-            .dot(model.Factors_Est[:, t]) + d_temp
 
     # Re-estimate unrestricted model
-    Gamma, Factors = model._fit_ipca(X=X_b, W=model.W, val_obs=model.val_obs,
-                                     PSF=model.PSF, quiet=True)
+    Gamma = None
+    while Gamma is None:
+        try:
+            for t in range(model.T):
+                d_temp = np.random.standard_t(5)*d[:,np.random.randint(0,high=model.T)]
+                X_b[:, t] = model.W[:, :, t].dot(Gamma_beta_l)\
+                    .dot(model.Factors_Est[:, t]) + d_temp
+            Gamma, Factors = model._fit_ipca(X=X_b, W=model.W, val_obs=model.val_obs,
+                                             PSF=model.PSF, quiet=True)
+
+        except np.linalg.LinAlgError:
+            warnings.warn("Encountered singularity in bootstrap iteration. Observation discarded.")
+            pass
 
     # Compute and store Walpha_b
     Wbeta_l_b = Gamma[l, :].dot(Gamma[l, :].T)
