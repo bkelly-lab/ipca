@@ -9,7 +9,7 @@ import progressbar
 import warnings
 import time
 
-class IPCARegressor(BaseEstimator, RegressorMixin):
+class IPCARegressor(BaseEstimator):
     """
     This class implements the IPCA algorithm by Kelly, Pruitt, Su (2017).
 
@@ -70,15 +70,16 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
                 setattr(self, k, v)
 
 
-    def fit(self, Panel=None, PSF=None, refit=False, **kwargs):
+    def fit(self, X=None, y=None, PSF=None, Gamma=None, Factors=None,
+            refit=False, **kwargs):
         """
         Fits the regressor to the data using an alternating least squares
         scheme.
 
         Parameters
         ----------
-        Panel :  numpy array
-            Panel of stacked data. Each row corresponds to an observation
+        X :  numpy array
+            X of stacked data. Each row corresponds to an observation
             (i, t) where i denotes the entity index and t denotes
             the time index. The panel may be unbalanced. The number of unique
             entities is n_samples, the number of unique dates is T, and
@@ -87,8 +88,10 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
 
             - Column 1: entity id (i)
             - Column 2: time index (t)
-            - Column 3: dependent variable corresponding to observation (i,t)
-            - Column 4 to column 4+L: characteristics.
+            - Column 3 to column 3+L: characteristics.
+
+        y : numpy array
+            dependent variable where indices correspond to those in X
 
         PSF : numpy array, optional
             Set of pre-specified factors as matrix of dimension (M, T)
@@ -99,8 +102,19 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
             instead use the stored values from the previous fit. Note, it is
             still necessary to pass the previously used P.
 
+        Gamma : numpy array or None
+            If provided, starting values for Gamma (see Notes)
+
+        Factors : numpy array
+            If provided, starting values for Factors (see Notes)
+
         Returns
         -------
+        self
+
+        Notes
+        -----
+        Updates IPCARegressor instances to include param estimates:
 
         Gamma : numpy array
             Array with dimensions (L, n_factors) containing the
@@ -122,26 +136,26 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
         # Check re-fitting is valid
         if refit:
             try:
-                self.X
+                self.Q
             except AttributeError:
                 raise ValueError('Refit only possible after initial fit.')
 
         # Check panel input
-        if Panel is None:
+        if X is None:
             raise ValueError('Must pass panel input data.')
         else:
             # remove panel rows containing missing obs
-            Panel = Panel[~np.any(np.isnan(Panel), axis=1)]
+            X = X[~np.any(np.isnan(X), axis=1)]
 
-        # Unpack the Panel
+        # Unpack the X
         if not refit:
-            X, W, val_obs = self._unpack_panel(Panel)
+            Q, W, val_obs = self._unpack_panel(X, y)
         else:
-            Panel, X, W, val_obs = self.Panel, self.X, self.W, self.val_obs
+            X, y, Q, W, val_obs = self.X, self.y, self.Q, self.W, self.val_obs
 
         # Handle pre-specified factors
         if PSF is not None:
-            if np.size(PSF, axis=1) != np.size(np.unique(Panel[:, 1])):
+            if np.size(PSF, axis=1) != np.size(np.unique(X[:, 1])):
                 raise ValueError("""Number of PSF observations must match
                                  number of unique dates in panel P""")
             self.has_PSF = True
@@ -167,7 +181,7 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
             self.n_factors_eff = self.n_factors
 
         # Check that enough features provided
-        if np.size(Panel, axis=1) - 3 < self.n_factors_eff:
+        if np.size(X, axis=1) - 2 < self.n_factors_eff:
             raise ValueError("""The number of factors requested exceeds number
                               of features""")
 
@@ -178,7 +192,8 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
         self.PSFcase = True if self.has_PSF or self.intercept else False
 
         # Run IPCA
-        Gamma, Factors = self._fit_ipca(X, W, val_obs, Panel=Panel, PSF=PSF,
+        Gamma, Factors = self._fit_ipca(Q, W, val_obs, X=X, y=y, PSF=PSF,
+                                        Gamma=Gamma, Factors=Factors,
                                         alpha=self.alpha, l1_ratio=self.l1_ratio,
                                         n_jobs=self.n_jobs, backend=self.backend,
                                         **kwargs)
@@ -195,31 +210,32 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
             else:
                 Factors = PSF
 
-        self.Gamma_Est, self.Factors_Est = Gamma, Factors
+        self.Gamma, self.Factors = Gamma, Factors
 
         # Save unpacked panel for Re-fitting
         if not refit:
-            self.Panel = Panel
-            self.PSF = PSF
             self.X = X
+            self.y = y
+            self.PSF = PSF
+            self.Q = Q
             self.W = W
             self.val_obs = val_obs
 
         # Compute Goodness of Fit
         self.r2_total, self.r2_pred, self.r2_total_x, self.r2_pred_x = \
-            self._R2_comps(Panel=Panel)
+            self._R2_comps(X=X, y=y)
 
-        return self.Gamma_Est, self.Factors_Est
+        return self
 
 
-    def fit_path(self, Panel=None, PSF=None, alpha_l=None, n_splits=10,
+    def fit_path(self, X=None, y=None, PSF=None, alpha_l=None, n_splits=10,
                  split_method=GroupKFold, n_jobs=1, backend="loky", **kwargs):
         """Fit a path of elastic net fits for various regularizing constants
 
         Parameters
         ----------
-        Panel :  numpy array
-            Panel of stacked data. Each row corresponds to an observation
+        X :  numpy array
+            X of stacked data. Each row corresponds to an observation
             (i, t) where i denotes the entity index and t denotes
             the time index. The panel may be unbalanced. The number of unique
             entities is n_samples, the number of unique dates is T, and
@@ -228,9 +244,10 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
 
             - Column 1: entity id (i)
             - Column 2: time index (t)
-            - Column 3: dependent variable corresponding to observation (i,t)
-            - Column 4 to column 4+L: characteristics.
+            - Column 3 to column 3+L: characteristics.
 
+        y : numpy array
+            dependent variable where indices correspond to those in X
         PSF : numpy array, optional
             Set of pre-specified factors as matrix of dimension (M, T)
         alpha_l : iterable or None
@@ -252,11 +269,11 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
         """
 
         # Check panel input
-        if Panel is None:
+        if X is None:
             raise ValueError('Must pass panel input data.')
         else:
             # remove panel rows containing missing obs
-            Panel = Panel[~np.any(np.isnan(Panel), axis=1)]
+            X = X[~np.any(np.isnan(X), axis=1)]
 
         # init alphas
         if alpha_l is None:
@@ -266,11 +283,11 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
         if n_jobs > 1:
             cvmse = Parallel(n_jobs=n_jobs, backend=backend)(
                         delayed(_fit_cv)(
-                        self, Panel, PSF, n_splits, split_method, alpha,
+                        self, X, y, PSF, n_splits, split_method, alpha,
                         **kwargs)
                         for alpha in alpha_l)
         else:
-            cvmse = [_fit_cv(self, Panel, PSF, n_splits, split_method, alpha,
+            cvmse = [_fit_cv(self, X, y, PSF, n_splits, split_method, alpha,
                              **kwargs)
                      for alpha in alpha_l]
 
@@ -280,14 +297,14 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
         return cvmse
 
 
-    def predict(self, Panel=None, mean_factor=False):
+    def predict(self, X=None, mean_factor=False):
         """
         Predicts fitted values for a previously fitted regressor
 
         Parameters
         ----------
-        Panel :  numpy array
-            Panel of stacked data. Each row corresponds to an observation
+        X :  numpy array
+            X of stacked data. Each row corresponds to an observation
             (i, t) where i denotes the entity index and t denotes
             the time index. The panel may be unbalanced. If an observation
             contains missing data NaN will be returned. Note that the
@@ -307,34 +324,34 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
         Returns
         -------
 
-        Ypred : numpy array
+        ypred : numpy array
             The length of the returned array matches the
             the length of data. A nan will be returned if there is missing
             characteristics information.
         """
 
-        if Panel is None:
+        if X is None:
             raise ValueError("""A panel of characteristics data must be
                               provided.""")
 
-        if np.any(np.isnan(Panel)):
+        if np.any(np.isnan(X)):
             raise ValueError("""Cannot contain missing observations / nan
                               values.""")
-        N = np.size(Panel, axis=0)
-        Ypred = np.full((N), np.nan)
+        N = np.size(X, axis=0)
+        ypred = np.full((N), np.nan)
 
-        mean_Factors_Est = np.mean(self.Factors_Est, axis=1).reshape((-1, 1))
+        mean_Factors = np.mean(self.Factors, axis=1).reshape((-1, 1))
 
         if mean_factor:
-            Ypred[:] = np.squeeze(Panel[:, 2:].dot(self.Gamma_Est)\
-                .dot(mean_Factors_Est))
+            ypred[:] = np.squeeze(X[:, 2:].dot(self.Gamma)\
+                .dot(mean_Factors))
         else:
 
             for t_i, t in enumerate(self.dates):
-                ix = (Panel[:, 1] == t)
-                Ypred[ix] = np.squeeze(Panel[ix, 2:].dot(self.Gamma_Est)\
-                    .dot(self.Factors_Est[:, t_i]))
-        return Ypred
+                ix = (X[:, 1] == t)
+                ypred[ix] = np.squeeze(X[ix, 2:].dot(self.Gamma)\
+                    .dot(self.Factors[:, t_i]))
+        return ypred
 
 
     def BS_Walpha(self, ndraws=1000, n_jobs=1, backend='loky'):
@@ -365,14 +382,14 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
             raise ValueError('Need to fit model with intercept first.')
 
         # Compute Walpha
-        Walpha = self.Gamma_Est[:, -1].T.dot(self.Gamma_Est[:, -1])
+        Walpha = self.Gamma[:, -1].T.dot(self.Gamma[:, -1])
 
         # Compute residuals
         d = np.full((self.L, self.T), np.nan)
 
         for t_i, t in enumerate(self.dates):
-            d[:, t_i] = self.X[:, t_i]-self.W[:, :, t_i].dot(self.Gamma_Est)\
-                .dot(self.Factors_Est[:, t_i])
+            d[:, t_i] = self.Q[:, t_i]-self.W[:, :, t_i].dot(self.Gamma)\
+                .dot(self.Factors[:, t_i])
 
         print("Starting Bootstrap...")
         Walpha_b = Parallel(n_jobs=n_jobs, backend=backend, verbose=10)(
@@ -413,17 +430,20 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
             P-value from the hypothesis test H0: Gamma_alpha=0
         """
 
+        if not self.unpacked:
+            self._unpack_panel()
+
         if self.PSFcase:
             raise ValueError('Need to fit model without intercept first.')
 
         # Compute Wbeta_l if l-th characteristics is set to zero
-        Wbeta_l = self.Gamma_Est[l, :].dot(self.Gamma_Est[l, :].T)
+        Wbeta_l = self.Gamma[l, :].dot(self.Gamma[l, :].T)
         Wbeta_l = np.trace(Wbeta_l)
         # Compute residuals
         d = np.full((self.L, self.T), np.nan)
         for t_i, t in enumerate(self.dates):
-            d[:, t_i] = self.X[:, t_i]-self.W[:, :, t_i].dot(self.Gamma_Est)\
-                .dot(self.Factors_Est[:, t_i])
+            d[:, t_i] = self.Q[:, t_i]-self.W[:, :, t_i].dot(self.Gamma)\
+                .dot(self.Factors[:, t_i])
 
         print("Starting Bootstrap...")
         Wbeta_l_b = Parallel(n_jobs=n_jobs, backend=backend, verbose=10)(
@@ -436,14 +456,14 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
         return pval
 
 
-    def predictOOS(self, Panel=None, mean_factor=False):
+    def predictOOS(self, X=None, y=None, mean_factor=False):
         """
         Predicts time t+1 observation using an out-of-sample design.
 
         Parameters
         ----------
-        Panel :  numpy array
-            Panel of stacked data. Each row corresponds to an observation
+        X :  numpy array
+            X of stacked data. Each row corresponds to an observation
             (i,t) where i denotes the entity index and t denotes
             the time index. All data must correspond to time t, i.e. all
             observations occur on the same date.
@@ -455,8 +475,10 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
 
             - Column 1: entity id (i)
             - Column 2: time index (t)
-            - Column 3: dependent variable corresponding to observation (i,t)
-            - Column 4 to column 4+L: characteristics.
+            - Column 3 to column 3+L: characteristics.
+
+        y : numpy array
+            dependent variable where indices correspond to those in X
 
         mean_factor: boolean
             If true, the estimated factors are averaged in the time-series
@@ -466,40 +488,40 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
         Returns
         -------
 
-        Ypred : numpy array
+        ypred : numpy array
             The length of the returned array matches the
             the length of data. A nan will be returned if there is missing
             characteristics information.
         """
 
-        if Panel is None:
+        if X is None:
             raise ValueError("""A panel of characteristics data must be
                               provided.""")
 
-        if len(np.unique(Panel[:, 1])) > 1:
+        if len(np.unique(X[:, 1])) > 1:
             raise ValueError('The panel must only have a single timestamp.')
 
-        N = np.size(Panel, axis=0)
-        Ypred = np.full((N), np.nan)
+        N = np.size(X, axis=0)
+        ypred = np.full((N), np.nan)
 
-        # Unpack the panel into Z, Y
-        Z, Y = Panel[:, 3:], Panel[:, 2]
+        # Unpack the panel into Z
+        Z = X[:, 2:]
 
         # Compute realized factor returns
-        Numer = self.Gamma_Est.T.dot(Z.T).dot(Y)
-        Denom = self.Gamma_Est.T.dot(Z.T).dot(Z).dot(self.Gamma_Est)
+        Numer = self.Gamma.T.dot(Z.T).dot(y)
+        Denom = self.Gamma.T.dot(Z.T).dot(Z).dot(self.Gamma)
         Factor_OOS = np.linalg.solve(Denom, Numer.reshape((-1, 1)))
 
         if mean_factor:
-            Ypred = np.squeeze(Z.dot(self.Gamma_Est)\
-                    .dot(np.mean(self.Factors_Est, axis=1).reshape((-1, 1))))
+            ypred = np.squeeze(Z.dot(self.Gamma)\
+                    .dot(np.mean(self.Factors, axis=1).reshape((-1, 1))))
         else:
-            Ypred = np.diag(Z.dot(self.Gamma_Est).dot(Factor_OOS))
+            ypred = np.diag(Z.dot(self.Gamma).dot(Factor_OOS))
 
-        return Ypred
+        return ypred
 
 
-    def _unpack_panel(self, Panel):
+    def _unpack_panel(self, X, y):
         """ Converts a stacked panel of data where each row corresponds to an
         observation (i, t) into a tensor of dimensions (N, L, T) where N is the
         number of unique entities, L is the number of characteristics and T is
@@ -508,16 +530,18 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
         Parameters
         ----------
 
-        Panel : Panel of data. Each row corresponds to an observation (i, t).
+        X : X of data. Each row corresponds to an observation (i, t).
                 The columns are ordered in the following manner:
                 COLUMN 1: entity id (i)
                 COLUMN 2: time index (t)
-                COLUMN 3: depdent variable Y(i,t)
-                COLUMN 4 and following: L characteristics
+                COLUMN 3 and following: L characteristics
+
+        y : numpy array
+            dependent variable where indices correspond to those in X
 
         Returns
         -------
-        X: array-like
+        Q: array-like
             matrix of dimensions (L, T), containing the characteristics
             weighted portfolios
 
@@ -527,13 +551,17 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
         val_obs: array-like
             matrix of dimension (T), containting the number of non missing
             observations at each point in time
+
+        Notes
+        -----
+        This is needed for the current bootstrap procedure
         """
 
-        dates = np.unique(Panel[:, 1])
-        ids = np.unique(Panel[:, 0])
+        dates = np.unique(X[:, 1])
+        ids = np.unique(X[:, 0])
         T = np.size(dates, axis=0)
         N = np.size(ids, axis=0)
-        L = np.size(Panel, axis=1) - 3
+        L = np.size(X, axis=1) - 2
         print('The panel dimensions are:')
         print('n_samples:', N, ', L:', L, ', T:', T)
 
@@ -541,32 +569,33 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
                                       widgets=[progressbar.Bar('=', '[', ']'),
                                                ' ', progressbar.Percentage()])
         bar.start()
-        X = np.full((L, T), np.nan)
+        Q = np.full((L, T), np.nan)
         W = np.full((L, L, T), np.nan)
         val_obs = np.full((T), np.nan)
         for t_i, t in enumerate(dates):
-            ixt = (Panel[:, 1] == t)
+            ixt = (X[:, 1] == t)
             val_obs[t_i] = np.sum(ixt)
             # Define characteristics weighted matrices
-            X[:, t_i] = Panel[ixt, 3:].T.dot(Panel[ixt, 2])/val_obs[t_i]
-            W[:, :, t_i] = Panel[ixt, 3:].T.dot(Panel[ixt, 3:])/val_obs[t_i]
+            Q[:, t_i] = X[ixt, 2:].T.dot(y[ixt])/val_obs[t_i]
+            W[:, :, t_i] = X[ixt, 2:].T.dot(X[ixt, 2:])/val_obs[t_i]
             bar.update(t_i)
         bar.finish()
 
         # Store panel dimensions
         self.ids, self.dates, self.T, self.N, self.L = ids, dates, T, N, L
 
-        return X, W, val_obs
+        return Q, W, val_obs
 
 
-    def _fit_ipca(self, X, W, val_obs, Panel=None, PSF=None, quiet=False,
+    def _fit_ipca(self, Q, W, val_obs, X=None, y=None, PSF=None,
+                  Gamma=None, Factors=None, quiet=False,
                   **kwargs):
         """
         Fits the regressor to the data using alternating least squares
 
         Parameters
         ----------
-        X : array-like of shape (L,T),
+        Q : array-like of shape (L,T),
             i.e. characteristics weighted portfolios
 
         W : array_like of shape (L, L,T),
@@ -576,17 +605,25 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
             matrix of dimension (T), containting the number of non missing
             observations at each point in time
 
-        Panel : optional, Panel of data.
+        X : optional, X of data.
 
                 Each row corresponds to an observation (i, t).
                 The columns are ordered in the following manner:
                 COLUMN 1: entity id (i)
                 COLUMN 2: time index (t)
-                COLUMN 3: depdent variable Y(i,t)
-                COLUMN 4 and following: L characteristics
+                COLUMN 3 and following: L characteristics
+
+        y : numpy array
+            dependent variable where indices correspond to those in X
 
         PSF : optional, array-like of shape (M, T), i.e.
             pre-specified factors
+
+        Gamma : numpy array or None
+            If provided, starting values for Gamma
+
+        Factors : numpy array
+            If provided, starting values for Factors
 
         quiet   : optional, bool
             If true no text output will be produced
@@ -607,11 +644,16 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
         """
 
         # Initialize the Alternating Least Squares Procedure
-        Gamma_Old, s, v = np.linalg.svd(X)
-        Gamma_Old = Gamma_Old[:, :self.n_factors_eff]
-        s = s[:self.n_factors_eff]
-        v = v[:self.n_factors_eff, :]
-        Factor_Old = np.diag(s).dot(v)
+        if Gamma is None or Factors is None:
+            Gamma_Old, s, v = np.linalg.svd(Q)
+            Gamma_Old = Gamma_Old[:, :self.n_factors_eff]
+            s = s[:self.n_factors_eff]
+            v = v[:self.n_factors_eff, :]
+            Factor_Old = np.diag(s).dot(v)
+        if Gamma is not None:
+            Gamma_Old = Gamma
+        if Factors is not None:
+            Factors_Old = Factors
 
         # Estimation Step
         tol_current = 1
@@ -620,8 +662,8 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
 
         while((iter <= self.max_iter) and (tol_current > self.iter_tol)):
 
-            Gamma_New, Factor_New = self._ALS_fit(Gamma_Old, W, X, val_obs,
-                                                  Panel=Panel, PSF=PSF,
+            Gamma_New, Factor_New = self._ALS_fit(Gamma_Old, W, Q, val_obs,
+                                                  X=X, y=y, PSF=PSF,
                                                   **kwargs)
             if self.PSFcase:
                 tol_current = np.max(np.abs(Gamma_New - Gamma_Old))
@@ -643,7 +685,7 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
         return Gamma_New, Factor_New
 
 
-    def _ALS_fit(self, Gamma_Old, W, X, val_obs, Panel=None, PSF=None,
+    def _ALS_fit(self, Gamma_Old, W, Q, val_obs, X=None, y=None, PSF=None,
                  n_jobs=1, backend="loky", alpha=0., l1_ratio=1., **kwargs):
         """Alternating least squares procedure to fit params
 
@@ -672,21 +714,21 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
                 if n_jobs > 1:
                     F_New = Parallel(n_jobs=n_jobs, backend=backend)(
                                 delayed(_Ft_fit)(
-                                    Gamma_Old, W[:,:,t], X[:,t])
+                                    Gamma_Old, W[:,:,t], Q[:,t])
                                 for t in range(T))
                     F_New = np.stack(F_New, axis=1)
 
                 else:
                     F_New = np.full((K, T), np.nan)
                     for t in range(T):
-                        F_New[:,t] = _Ft_fit(Gamma_Old, W[:,:,t], X[:,t])
+                        F_New[:,t] = _Ft_fit(Gamma_Old, W[:,:,t], Q[:,t])
 
             # observed factors+latent factors case
             else:
                 if n_jobs > 1:
                     F_New = Parallel(n_jobs=n_jobs, backend=backend)(
                                 delayed(_Ft_PSF_fit)(
-                                    Gamma_Old, W[:,:,t], X[:,t], PSF[:,t],
+                                    Gamma_Old, W[:,:,t], Q[:,t], PSF[:,t],
                                     K, Ktilde)
                                 for t in range(T))
                     F_New = np.stack(F_New, axis=1)
@@ -694,7 +736,7 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
                 else:
                     F_New = np.full((K, T), np.nan)
                     for t in range(T):
-                        F_New[:,t] = _Ft_PSF_fit(Gamma_Old, W[:,:,t], X[:,t],
+                        F_New[:,t] = _Ft_PSF_fit(Gamma_Old, W[:,:,t], Q[:,t],
                                                  PSF[:,t], K, Ktilde)
 
         else:
@@ -702,11 +744,11 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
 
         # ALS Step 2
 
-        if Panel is None:
-            Gamma_New = _Gamma_portfolio_fit(F_New, X, W, val_obs, PSF, L, K,
+        if X is None:
+            Gamma_New = _Gamma_portfolio_fit(F_New, Q, W, val_obs, PSF, L, K,
                                              Ktilde, T)
         else:
-            Gamma_New = _Gamma_panel_fit(F_New, Panel, PSF, L, Ktilde, alpha,
+            Gamma_New = _Gamma_panel_fit(F_New, X, y, PSF, L, Ktilde, alpha,
                                          l1_ratio, **kwargs)
 
         # condition checks
@@ -729,7 +771,7 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
         return Gamma_New, F_New
 
 
-    def _R2_comps(self, Panel=None):
+    def _R2_comps(self, X=None, y=None):
         """
         Computes the goodness of fit measures both at the entity level
         and at the managed portfolio level. Requires the estimator to be
@@ -737,7 +779,7 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
 
         Parameters
         ----------
-        Panel   :   Panel of stacked data. Each row corresponds to an
+        X   :   X of stacked data. Each row corresponds to an
                     observation (i, t) where i denotes the entity index and t
                     denotes the time index. The panel may be unbalanced. The
                     number of unique entities is n_samples, the number of
@@ -747,41 +789,39 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
 
                 - Column 1: entity id (i)
                 - Column 2: time index (t)
-                - Column 3: dependent variable corresponding to observation
-                            (i,t)
-                - Column 4 to column 4+L: characteristics.
+                - Column 3 to column 3+L: characteristics.
+
+        y : numpy array
+            dependent variable where indices correspond to those in X
 
         """
 
-        # Compute goodness of fit measures, entity level
-        Ytrue = Panel[:, 2]
-
         # R2 Total
-        Ypred = self.predict(np.delete(Panel, 2, axis=1), mean_factor=False)
-        r2_total = 1-np.nansum((Ypred-Ytrue)**2)/np.nansum(Ytrue**2)
+        ypred = self.predict(X, mean_factor=False)
+        r2_total = 1-np.nansum((ypred-y)**2)/np.nansum(y**2)
 
         # R2 Pred
-        Ypred = self.predict(np.delete(Panel, 2, axis=1), mean_factor=True)
-        r2_pred = 1-np.nansum((Ypred-Ytrue)**2)/np.nansum(Ytrue**2)
+        ypred = self.predict(X, mean_factor=True)
+        r2_pred = 1-np.nansum((ypred-y)**2)/np.nansum(y**2)
 
         # Compute goodness of fit measures, portfolio level
         Num_tot, Denom_tot, Num_pred, Denom_pred = 0, 0, 0, 0
 
-        mean_Factors_Est = np.mean(self.Factors_Est, axis=1).reshape((-1, 1))
+        mean_Factors = np.mean(self.Factors, axis=1).reshape((-1, 1))
 
         for t_i, t in enumerate(self.dates):
-            Ytrue = self.X[:, t_i]
+            ytrue = self.Q[:, t_i]
             # R2 Total
-            Ypred = self.W[:, :, t_i].dot(self.Gamma_Est)\
-                .dot(self.Factors_Est[:, t_i])
-            Num_tot += (Ytrue-Ypred).T.dot((Ytrue-Ypred))
-            Denom_tot += Ytrue.T.dot(Ytrue)
+            ypred = self.W[:, :, t_i].dot(self.Gamma)\
+                .dot(self.Factors[:, t_i])
+            Num_tot += (ytrue-ypred).T.dot((ytrue-ypred))
+            Denom_tot += ytrue.T.dot(ytrue)
 
             # R2 Pred
-            Ypred = self.W[:, :, t_i].dot(self.Gamma_Est).dot(mean_Factors_Est)
-            Ypred = np.squeeze(Ypred)
-            Num_pred += (Ytrue-Ypred).T.dot((Ytrue-Ypred))
-            Denom_pred += Ytrue.T.dot(Ytrue)
+            ypred = self.W[:, :, t_i].dot(self.Gamma).dot(mean_Factors)
+            ypred = np.squeeze(ypred)
+            Num_pred += (ytrue-ypred).T.dot((ytrue-ypred))
+            Denom_pred += ytrue.T.dot(ytrue)
 
         r2_total_x = 1-Num_tot/Denom_tot
         r2_pred_x = 1-Num_pred/Denom_pred
@@ -789,26 +829,45 @@ class IPCARegressor(BaseEstimator, RegressorMixin):
         return r2_total, r2_pred, r2_total_x, r2_pred_x
 
 
-def _Ft_fit(Gamma_Old, W_t, X_t):
+def _Ft_fit_portfolio(Gamma_Old, W_t, Q_t):
     """helper func to parallelize F ALS fit"""
 
     m1 = Gamma_Old.T.dot(W_t).dot(Gamma_Old)
-    m2 = Gamma_Old.T.dot(X_t)
+    m2 = Gamma_Old.T.dot(Q_t)
 
     return np.squeeze(_numba_solve(m1, m2.reshape((-1, 1))))
 
 
-def _Ft_PSF_fit(Gamma_Old, W_t, X_t, PSF_t, K, Ktilde):
+def _Ft_PSF_fit_portfolio(Gamma_Old, W_t, Q_t, PSF_t, K, Ktilde):
     """helper func to parallelize F ALS fit with observed factors"""
 
     m1 = Gamma_Old[:,:K].T.dot(W_t).dot(Gamma_Old[:,:K])
-    m2 = Gamma_Old[:,:K].T.dot(X_t)
+    m2 = Gamma_Old[:,:K].T.dot(Q_t)
     m2 -= Gamma_Old[:,:K].T.dot(W_t).dot(Gamma_Old[:,K:Ktilde]).dot(PSF_t)
 
     return np.squeeze(_numba_solve(m1, m2.reshape((-1, 1))))
 
 
-def _Gamma_portfolio_fit(F_New, X, W, val_obs, PSF, L, K, Ktilde, T):
+def _Ft_fit_panel(Gamma_Old, X_t, y_t):
+    """fits F_t using panel data"""
+
+    exog_t = X_t[:,2:].dot(Gamma_Old)
+    Ft = np.linalg.lstsq(exog_t, y_t)[0]
+
+    return Ft
+
+
+def _Ft_PSF_fit_panel(Gamma_Old, X_t, y_t, PSF_t, K, Ktilde):
+    """fits F_t using panel data with PSF"""
+
+    exog_t = X_t[:,2:].dot(Gamma_Old)
+    y_t_resid = y_t - exog_t[:,K:Ktilde].dot(PSF_t)
+    Ft = np.linalg.lstsq(exog_t[:,:K], y_t_resid)
+
+    return Ft
+
+
+def _Gamma_fit_portfolio(F_New, Q, W, val_obs, PSF, L, K, Ktilde, T):
     """helper function for fitting gamma without panel"""
 
     Numer = _numba_full((L*Ktilde, 1), 0.0)
@@ -818,7 +877,7 @@ def _Gamma_portfolio_fit(F_New, X, W, val_obs, PSF, L, K, Ktilde, T):
     if PSF is None:
         for t in range(T):
 
-            Numer += _numba_kron(X[:, t].reshape((-1, 1)),
+            Numer += _numba_kron(Q[:, t].reshape((-1, 1)),
                                  F_New[:, t].reshape((-1, 1)))\
                                  * val_obs[t]
             Denom += _numba_kron(W[:, :, t],
@@ -829,7 +888,7 @@ def _Gamma_portfolio_fit(F_New, X, W, val_obs, PSF, L, K, Ktilde, T):
     # observed+latent factors
     elif K > 0:
         for t in range(T):
-            Numer += _numba_kron(X[:, t].reshape((-1, 1)),
+            Numer += _numba_kron(Q[:, t].reshape((-1, 1)),
                                  np.vstack(
                                  (F_New[:, t].reshape((-1, 1)),
                                  PSF[:, t].reshape((-1, 1)))))\
@@ -842,7 +901,7 @@ def _Gamma_portfolio_fit(F_New, X, W, val_obs, PSF, L, K, Ktilde, T):
     # only observed factors
     else:
         for t in range(T):
-            Numer += _numba_kron(X[:, t].reshape((-1, 1)),
+            Numer += _numba_kron(Q[:, t].reshape((-1, 1)),
                                  PSF[:, t].reshape((-1, 1)))\
                                  * val_obs[t]
             Denom += _numba_kron(W[:, :, t],
@@ -855,7 +914,7 @@ def _Gamma_portfolio_fit(F_New, X, W, val_obs, PSF, L, K, Ktilde, T):
     return Gamma_New
 
 
-def _Gamma_panel_fit(F_New, Panel, PSF, L, Ktilde, alpha, l1_ratio, **kwargs):
+def _Gamma_panel_fit(F_New, X, y, PSF, L, Ktilde, alpha, l1_ratio, **kwargs):
     """helper function for estimating vectorized Gamma with panel"""
 
     # join observed factors with latent factors and map to panel
@@ -866,35 +925,37 @@ def _Gamma_panel_fit(F_New, Panel, PSF, L, Ktilde, alpha, l1_ratio, **kwargs):
             F = PSF
         else:
             F = np.vstack((F_New, PSF))
-    F = F[:,np.unique(Panel[:,1], return_inverse=True)[1]]
+    F = F[:,np.unique(X[:,1], return_inverse=True)[1]]
 
     # interact factors and characteristics
-    ZkF = np.hstack((F[k,:,None] * Panel[:,3:] for k in range(Ktilde)))
+    ZkF = np.hstack((F[k,:,None] * X[:,2:] for k in range(Ktilde)))
 
     # elastic net fit
     if alpha:
         mod = ElasticNet(alpha=alpha, l1_ratio=l1_ratio, **kwargs)
-        mod.fit(ZkF, Panel[:,2])
+        mod.fit(ZkF, y)
         gamma = mod.coef_
 
     # OLS fit
     else:
-        gamma = _numba_lstsq(ZkF, Panel[:,2])[0]
+        print(ZkF, y)
+        gamma = np.linalg.lstsq(ZkF, y)[0]
+#        gamma = _numba_lstsq(ZkF, y)[0]
 
     gamma = gamma.reshape((Ktilde, L)).T
 
     return gamma
 
 
-def _fit_cv(model, Panel, PSF, n_splits, split_method, alpha, **kwargs):
+def _fit_cv(model, X, y, PSF, n_splits, split_method, alpha, **kwargs):
     """inner function for fit_path doing CV
 
     Parameters
     ----------
     model : IPCA model instance
         contains the params
-    Panel :  numpy array
-        Panel of stacked data. Each row corresponds to an observation
+    X :  numpy array
+        X of stacked data. Each row corresponds to an observation
         (i, t) where i denotes the entity index and t denotes
         the time index. The panel may be unbalanced. The number of unique
         entities is n_samples, the number of unique dates is T, and
@@ -905,6 +966,8 @@ def _fit_cv(model, Panel, PSF, n_splits, split_method, alpha, **kwargs):
         - Column 2: time index (t)
         - Column 3 to column 3+L: characteristics.
 
+    y : numpy array
+        dependent variable where indices correspond to those in X
     PSF : numpy array, optional
         Set of pre-specified factors as matrix of dimension (M, T)
     n_splits : scalar
@@ -928,17 +991,18 @@ def _fit_cv(model, Panel, PSF, n_splits, split_method, alpha, **kwargs):
     mse_l = []
     split = split_method(n_splits=n_splits)
 
-    full_tind = np.unique(Panel[:,1])
+    full_tind = np.unique(X[:,1])
 
-    for train, test in split.split(Panel, groups=Panel[:,0]):
+    for train, test in split.split(X, groups=X[:,0]):
 
         # build partitioned model
-        train_Panel = Panel[train,:]
-        test_Panel = Panel[test,:]
+        train_X = X[train,:]
+        test_X = X[test,:]
+        test_y = y[test,:]
         if PSF is None:
             train_PSF = None
         else:
-            train_tind = np.unique(train_Panel[:,1])
+            train_tind = np.unique(train_X[:,1])
             train_tind = np.where(np.isin(full_tind, train_tind))[0]
             train_PSF = PSF[:,train_tind]
 
@@ -946,12 +1010,12 @@ def _fit_cv(model, Panel, PSF, n_splits, split_method, alpha, **kwargs):
         params = model.get_params()
         params["alpha"] = alpha
         train_IPCA = IPCARegressor(**params)
-        train_IPCA.fit(train_Panel, train_PSF, **kwargs)
+        train_IPCA = train_IPCA.fit(train_X, train_PSF, **kwargs)
 
         # get MSE
-        test_pred = train_IPCA.predict(np.delete(test_Panel, 2, axis=1),
+        test_pred = train_IPCA.predict(np.delete(test_X, 2, axis=1),
                                        mean_factor=True)
-        mse = np.sum(np.square(test_Panel[:,2] - test_pred))
+        mse = np.sum(np.square(test_y - test_pred))
         mse /= test_pred.shape[0]
         mse_l.append(mse)
 
@@ -959,7 +1023,7 @@ def _fit_cv(model, Panel, PSF, n_splits, split_method, alpha, **kwargs):
 
 
 def _BS_Walpha_sub(model, n, d):
-    X_b = np.full((model.L, model.T), np.nan)
+    Q_b = np.full((model.L, model.T), np.nan)
     np.random.seed(n)
 
     # Re-estimate unrestricted model
@@ -968,9 +1032,9 @@ def _BS_Walpha_sub(model, n, d):
         try:
             for t in range(model.T):
                 d_temp = np.random.standard_t(5)*d[:,np.random.randint(0,high=model.T)]
-                X_b[:, t] = model.W[:, :, t].dot(model.Gamma_Est[:, :-1])\
-                    .dot(model.Factors_Est[:-1, t]) + d_temp
-            Gamma, Factors = model._fit_ipca(X=X_b, W=model.W, val_obs=model.val_obs,
+                Q_b[:, t] = model.W[:, :, t].dot(model.Gamma[:, :-1])\
+                    .dot(model.Factors[:-1, t]) + d_temp
+            Gamma, Factors = model._fit_ipca(Q=Q_b, W=model.W, val_obs=model.val_obs,
                                              PSF=model.PSF, quiet=True)
         except np.linalg.LinAlgError:
             warnings.warn("Encountered singularity in bootstrap iteration. Observation discarded.")
@@ -984,10 +1048,10 @@ def _BS_Walpha_sub(model, n, d):
 
 
 def _BS_Wbeta_sub(model, n, d, l):
-    X_b = np.full((model.L, model.T), np.nan)
+    Q_b = np.full((model.L, model.T), np.nan)
     np.random.seed(n)
     #Modify Gamma_beta such that its l-th row is zero
-    Gamma_beta_l = np.copy(model.Gamma_Est)
+    Gamma_beta_l = np.copy(model.Gamma)
     Gamma_beta_l[l, :] = 0
 
     # Re-estimate unrestricted model
@@ -996,9 +1060,9 @@ def _BS_Wbeta_sub(model, n, d, l):
         try:
             for t in range(model.T):
                 d_temp = np.random.standard_t(5)*d[:,np.random.randint(0,high=model.T)]
-                X_b[:, t] = model.W[:, :, t].dot(Gamma_beta_l)\
-                    .dot(model.Factors_Est[:, t]) + d_temp
-            Gamma, Factors = model._fit_ipca(X=X_b, W=model.W, val_obs=model.val_obs,
+                Q_b[:, t] = model.W[:, :, t].dot(Gamma_beta_l)\
+                    .dot(model.Factors[:, t]) + d_temp
+            Gamma, Factors = model._fit_ipca(Q=Q_b, W=model.W, val_obs=model.val_obs,
                                              PSF=model.PSF, quiet=True)
 
         except np.linalg.LinAlgError:
