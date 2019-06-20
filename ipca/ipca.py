@@ -143,6 +143,10 @@ class IPCARegressor(BaseEstimator):
             y = y[non_nan_ind]
             X = X[non_nan_ind]
 
+        # set data_type to panel if doing regularized estimation
+        if self.alpha > 0.:
+            data_type = "panel"
+
         # init data dimensions
         self = self._init_dimensions(X)
 
@@ -458,6 +462,10 @@ class IPCARegressor(BaseEstimator):
             P-value from the hypothesis test H0: Gamma_alpha=0
         """
 
+        if self.alpha > 0.:
+            raise ValueError("Bootstrap currently not supported for\
+                              regularized estimation.")
+
         if not self.intercept:
             raise ValueError('Need to fit model with intercept first.')
 
@@ -513,6 +521,10 @@ class IPCARegressor(BaseEstimator):
         pval : float
             P-value from the hypothesis test H0: Gamma_alpha=0
         """
+
+        if self.alpha > 0.:
+            raise ValueError("Bootstrap currently not supported for\
+                              regularized estimation.")
 
         if self.PSFcase:
             raise ValueError('Need to fit model without intercept first.')
