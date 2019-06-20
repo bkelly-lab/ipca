@@ -134,21 +134,23 @@ class IPCARegressor(BaseEstimator):
 
         """
 
-        # init data dimensions
-        self = self._init_dimensions(X)
-
         # Check panel input
         if X is None:
             raise ValueError('Must pass panel input data.')
         else:
             # remove panel rows containing missing obs
-            X = X[~np.any(np.isnan(X), axis=1)]
+            non_nan_ind = ~np.any(np.isnan(X), axis=1)
+            y = y[non_nan_ind]
+            X = X[non_nan_ind]
+
+        # init data dimensions
+        self = self._init_dimensions(X)
 
         # Handle pre-specified factors
         if PSF is not None:
             if np.size(PSF, axis=1) != np.size(np.unique(X[:, 1])):
                 raise ValueError("""Number of PSF observations must match
-                                 number of unique dates in panel P""")
+                                 number of unique dates in panel X""")
             self.has_PSF = True
         else:
             self.has_PSF = False
@@ -182,16 +184,16 @@ class IPCARegressor(BaseEstimator):
         # only an intercept was passed.
         self.PSFcase = True if self.has_PSF or self.intercept else False
 
+        # store data
+        self.X, self.y, self.PSF = X, y, PSF
+        self.Q, self.W, self.val_obs = _unpack_panel(X, y)
+
         # Run IPCA
-        if data_type == "panel":
-            Gamma, Factors = self._fit_ipca(X=X, y=y, PSF=PSF, Gamma=Gamma,
-                                            Factors=Factors, **kwargs)
-        elif data_type == "portfolio":
-            self.Q, self.W, self.val_obs = _unpack_panel(X, y)
-            Gamma, Factors = self._fit_ipca(Q=self.Q, W=self.W,
-                                            val_obs=self.val_obs, PSF=PSF,
-                                            Gamma=Gamma, Factors=Factors,
-                                            data_type="portfolio", **kwargs)
+        Gamma, Factors = self._fit_ipca(X=self.X, y=self.y, Q=self.Q,
+                                        W=self.W, val_obs=self.val_obs,
+                                        PSF=self.PSF, Gamma=Gamma,
+                                        Factors=Factors, data_type=data_type,
+                                        **kwargs)
 
         # Store estimates
         if self.PSFcase:
@@ -206,11 +208,6 @@ class IPCARegressor(BaseEstimator):
                 Factors = PSF
 
         self.Gamma, self.Factors = Gamma, Factors
-
-        # store data
-        self.X = X
-        self.y = y
-        self.PSF = PSF
 
         return self
 
@@ -260,7 +257,9 @@ class IPCARegressor(BaseEstimator):
             raise ValueError('Must pass panel input data.')
         else:
             # remove panel rows containing missing obs
-            X = X[~np.any(np.isnan(X), axis=1)]
+            non_nan_ind = ~np.any(np.isnan(X), axis=1)
+            y = y[non_nan_ind]
+            X = X[non_nan_ind]
 
         # init alphas
         if alpha_l is None:
@@ -451,9 +450,9 @@ class IPCARegressor(BaseEstimator):
         if not self.intercept:
             raise ValueError('Need to fit model with intercept first.')
 
-        # prep portfolio data if not already unpacked from panel
+        # fail if model isn't estimated
         if not hasattr(self, "Q"):
-            self.Q, self.W, self.val_obs = _unpack_panel(self.X, self.y)
+            raise ValueError("Bootstrap can only be run on fitted model.")
 
         # Compute Walpha
         Walpha = self.Gamma[:, -1].T.dot(self.Gamma[:, -1])
@@ -507,9 +506,9 @@ class IPCARegressor(BaseEstimator):
         if self.PSFcase:
             raise ValueError('Need to fit model without intercept first.')
 
-        # prep portfolio data if not already unpacked from panel
+        # fail if model isn't estimated
         if not hasattr(self, "Q"):
-            self.Q, self.W, self.val_obs = _unpack_panel(self.X, self.y)
+            raise ValueError("Bootstrap can only be run on fitted model.")
 
         # Compute Wbeta_l if l-th characteristics is set to zero
         Wbeta_l = self.Gamma[l, :].dot(self.Gamma[l, :].T)
@@ -662,8 +661,6 @@ class IPCARegressor(BaseEstimator):
         if data_type == "panel":
             ALS_inputs = (X, y)
             ALS_fit = self._ALS_fit_panel
-            # TODO remove, need to figure out how to init Gamma
-            Q, W, val_obs = _unpack_panel(X, y)
         elif data_type == "portfolio":
             ALS_inputs = (Q, W, val_obs)
             ALS_fit = self._ALS_fit_portfolio
@@ -712,8 +709,7 @@ class IPCARegressor(BaseEstimator):
         return Gamma_New, Factor_New
 
 
-    def _ALS_fit_portfolio(self, Gamma_Old, Q, W, val_obs, PSF=None,
-                           **kwargs):
+    def _ALS_fit_portfolio(self, Gamma_Old, Q, W, val_obs, PSF=None, **kwargs):
         """Alternating least squares procedure to fit params
 
         Runs using portfolio data as input

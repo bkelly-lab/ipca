@@ -84,10 +84,10 @@ regr = IPCARegressor(n_factors=2, intercept=False)
 regr = regr.fit(X=data_x, y=data_y, PSF=PSF)
 
 # Test nan observations
-#regr = IPCARegressor(n_factors=1, intercept=True)
-#data_nan = data_x.copy()
-#data_nan[10:30, 2:] = np.nan
-#regr = regr.fit(X=data_nan, y=data_y)
+regr = IPCARegressor(n_factors=1, intercept=True)
+data_nan = data_x.copy()
+data_nan[10:30, 2:] = np.nan
+regr = regr.fit(X=data_nan, y=data_y)
 
 # Test missing observations
 regr = IPCARegressor(n_factors=1, intercept=True)
