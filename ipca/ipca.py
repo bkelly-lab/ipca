@@ -72,7 +72,7 @@ class IPCARegressor(BaseEstimator):
 
 
     def fit(self, X=None, y=None, PSF=None, Gamma=None, Factors=None,
-            data_type="panel", **kwargs):
+            data_type="portfolio", **kwargs):
         """
         Fits the regressor to the data using an alternating least squares
         scheme.
@@ -134,6 +134,9 @@ class IPCARegressor(BaseEstimator):
 
         """
 
+        # init data dimensions
+        self = self._init_dimensions(X)
+
         # Check panel input
         if X is None:
             raise ValueError('Must pass panel input data.')
@@ -181,12 +184,10 @@ class IPCARegressor(BaseEstimator):
 
         # Run IPCA
         if data_type == "panel":
-            self = self._init_dimensions(X)
             Gamma, Factors = self._fit_ipca(X=X, y=y, PSF=PSF, Gamma=Gamma,
                                             Factors=Factors, **kwargs)
         elif data_type == "portfolio":
-            self = self._init_dimensions(X)
-            self.Q, self.W, self.val_obs = _unpack_panel(self.X, self.y)
+            self.Q, self.W, self.val_obs = _unpack_panel(X, y)
             Gamma, Factors = self._fit_ipca(Q=self.Q, W=self.W,
                                             val_obs=self.val_obs, PSF=PSF,
                                             Gamma=Gamma, Factors=Factors,
@@ -283,13 +284,13 @@ class IPCARegressor(BaseEstimator):
         return cvmse
 
 
-    def predict(self, X=None, mean_factor=False, data_type="panel"):
+    def predict(self, X=None, y=None, mean_factor=False, data_type="panel"):
         """wrapper around different data type predict methods"""
 
         if data_type == "panel":
             return self.predict_panel(X, mean_factor)
         elif data_type == "portfolio":
-            return self.predict_portfolio(X, mean_factor)
+            return self.predict_portfolio(X, y, mean_factor)
         else:
             raise ValueError("Unsupported data_type: %s" % data_type)
 
@@ -351,7 +352,7 @@ class IPCARegressor(BaseEstimator):
         return ypred
 
 
-    def predict_portfolio(self, X=None, mean_factor=False):
+    def predict_portfolio(self, X=None, y=None, mean_factor=False):
         """
         Predicts fitted values for a previously fitted regressor + portfolios
 
@@ -370,10 +371,13 @@ class IPCARegressor(BaseEstimator):
             - Column 2: time index (t)
             - Column 3 to column 3+L: characteristics.
 
+        y : numpy array
+            dependent variable where indices correspond to those in X.
+            Needed to unwrap panel.
+
         mean_factor: boolean
             If true, the estimated factors are averaged in the time-series
             before prediction.
-
 
         Returns
         -------
@@ -594,7 +598,7 @@ class IPCARegressor(BaseEstimator):
 
     def _fit_ipca(self, X=None, y=None, PSF=None, Q=None, W=None,
                   val_obs=None, Gamma=None, Factors=None, quiet=False,
-                  data_type="panel", **kwargs):
+                  data_type="portfolio", **kwargs):
         """
         Fits the regressor to the data using alternating least squares
 
@@ -658,6 +662,8 @@ class IPCARegressor(BaseEstimator):
         if data_type == "panel":
             ALS_inputs = (X, y)
             ALS_fit = self._ALS_fit_panel
+            # TODO remove, need to figure out how to init Gamma
+            Q, W, val_obs = _unpack_panel(X, y)
         elif data_type == "portfolio":
             ALS_inputs = (Q, W, val_obs)
             ALS_fit = self._ALS_fit_portfolio
@@ -734,7 +740,7 @@ class IPCARegressor(BaseEstimator):
 
             # case with no observed factors
             if PSF is None:
-                if n_jobs > 1:
+                if self.n_jobs > 1:
                     F_New = Parallel(n_jobs=self.n_jobs,
                                     backend=self.backend)(
                                 delayed(_Ft_fit_portfolio)(
@@ -750,7 +756,7 @@ class IPCARegressor(BaseEstimator):
 
             # observed factors+latent factors case
             else:
-                if n_jobs > 1:
+                if self.n_jobs > 1:
                     F_New = Parallel(n_jobs=n_jobs, backend=backend)(
                                 delayed(_Ft_fit_PSF_portfolio)(
                                     Gamma_Old, W[:,:,t], Q[:,t], PSF[:,t],
@@ -770,7 +776,7 @@ class IPCARegressor(BaseEstimator):
             F_New = None
 
         # ALS Step 2
-        Gamma_New = _Gamma_portfolio_fit(F_New, Q, W, val_obs, PSF, L, K,
+        Gamma_New = _Gamma_fit_portfolio(F_New, Q, W, val_obs, PSF, L, K,
                                          Ktilde, T)
 
         # condition checks
@@ -824,7 +830,7 @@ class IPCARegressor(BaseEstimator):
 
             # case with no observed factors
             if PSF is None:
-                if n_jobs > 1:
+                if self.n_jobs > 1:
                     F_New = Parallel(n_jobs=self.n_jobs,
                                     backend=self.backend)(
                                 delayed(_Ft_fit_panel)(
@@ -840,7 +846,7 @@ class IPCARegressor(BaseEstimator):
 
             # observed factors+latent factors case
             else:
-                if n_jobs > 1:
+                if self.n_jobs > 1:
                     F_New = Parallel(n_jobs=n_jobs, backend=backend)(
                                 delayed(_Ft_fit_PSF_panel)(
                                     Gamma_Old, X[tind,:], y[tind], PSF[:,t],
@@ -850,7 +856,7 @@ class IPCARegressor(BaseEstimator):
 
                 else:
                     F_New = np.full((K, T), np.nan)
-                    for t in range(T):
+                    for t, tind in enumerate(Tind):
                         F_New[:,t] = _Ft_fit_PSF_panel(Gamma_Old, X[tind,:],
                                                        y[tind], PSF[:,t], K,
                                                        Ktilde)
@@ -859,7 +865,7 @@ class IPCARegressor(BaseEstimator):
             F_New = None
 
         # ALS Step 2
-        Gamma_New = _Gamma_panel_fit(F_New, X, y, PSF, L, Ktilde,
+        Gamma_New = _Gamma_fit_panel(F_New, X, y, PSF, L, Ktilde,
                                      self.alpha, self.l1_ratio, **kwargs)
 
         # condition checks
@@ -882,7 +888,7 @@ class IPCARegressor(BaseEstimator):
         return Gamma_New, F_New
 
 
-    def _init_dimensions(X):
+    def _init_dimensions(self, X):
         """given panel data X and y initialize the dimensions of data
 
         Parameters
@@ -1011,7 +1017,7 @@ def _Ft_fit_panel(Gamma_Old, X_t, y_t):
     """fits F_t using panel data"""
 
     exog_t = X_t[:,2:].dot(Gamma_Old)
-    Ft = np.linalg.lstsq(exog_t, y_t)[0]
+    Ft = _numba_lstsq(exog_t, y_t)[0]
 
     return Ft
 
@@ -1021,7 +1027,7 @@ def _Ft_fit_PSF_panel(Gamma_Old, X_t, y_t, PSF_t, K, Ktilde):
 
     exog_t = X_t[:,2:].dot(Gamma_Old)
     y_t_resid = y_t - exog_t[:,K:Ktilde].dot(PSF_t)
-    Ft = np.linalg.lstsq(exog_t[:,:K], y_t_resid)
+    Ft = _numba_lstsq(exog_t[:,:K], y_t_resid)[0]
 
     return Ft
 
@@ -1156,7 +1162,8 @@ def _fit_cv(model, X, y, PSF, n_splits, split_method, alpha, **kwargs):
         # build partitioned model
         train_X = X[train,:]
         test_X = X[test,:]
-        test_y = y[test,:]
+        train_y = y[train]
+        test_y = y[test]
         if PSF is None:
             train_PSF = None
         else:
@@ -1168,11 +1175,10 @@ def _fit_cv(model, X, y, PSF, n_splits, split_method, alpha, **kwargs):
         params = model.get_params()
         params["alpha"] = alpha
         train_IPCA = IPCARegressor(**params)
-        train_IPCA = train_IPCA.fit(train_X, train_PSF, **kwargs)
+        train_IPCA = train_IPCA.fit(train_X, train_y, train_PSF, **kwargs)
 
         # get MSE
-        test_pred = train_IPCA.predict(np.delete(test_X, 2, axis=1),
-                                       mean_factor=True)
+        test_pred = train_IPCA.predict(test_X, mean_factor=True)
         mse = np.sum(np.square(test_y - test_pred))
         mse /= test_pred.shape[0]
         mse_l.append(mse)
@@ -1222,7 +1228,7 @@ def _BS_Wbeta_sub(model, n, d, l):
         try:
             for t in range(model.T):
                 d_temp = np.random.standard_t(5)
-                d_temp *= *d[:,np.random.randint(0,high=model.T)]
+                d_temp *= d[:,np.random.randint(0,high=model.T)]
                 Q_b[:, t] = model.W[:, :, t].dot(Gamma_beta_l)\
                     .dot(model.Factors[:, t]) + d_temp
             Gamma, Factors = model._fit_ipca(Q=Q_b, W=model.W,
