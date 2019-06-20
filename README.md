@@ -6,13 +6,14 @@ This is a Python implementation of the Instrumtented Principal Components Analys
 
 ## Usage
 
-Exemplary use of the ipca package. The data is the seminal Grunfeld data set as provided on [statsmodels](http://www.statsmodels.org). Note, the package
-requires the panel of input data columns to be ordered in the following way:
+Exemplary use of the ipca package. The data is the seminal Grunfeld data set as provided on [statsmodels](http://www.statsmodels.org). Note, the `fit` method
+takes a panel of data, `X`, with the following columns:
 
 1. entity id (numeric)
 2. time (numeric)
-3. dependent variable (numeric),
-4. and following columns contain characteristics.
+3. and following columns contain characteristics.
+
+as well as a series of dependent variables, `y`, of the same length as `X`.
 
 ```python
 import numpy as np
@@ -28,14 +29,18 @@ data.firm = data.firm.apply(lambda x: ID[x])
 
 # Ensure that ordering of the data is correct
 data = data[['firm','year','invest','value','capital']]
+y = data['invest']
+X = data.drop('invest', axis=1)
 
 # Convert to numpy
-data = data.to_numpy()
+y = y.to_numpy()
+X = X.to_numpy()
 
 # Call ipca
 from ipca import IPCARegressor
 regr = IPCARegressor(n_factors=1, intercept=False)
-Gamma_New, Factor_New = regr.fit(data=data)
+regr = regr.fit(X=X, y=y)
+Gamma, Factors = regr.Gamma, regr.Factors
 ```
 
 ## Installing
@@ -88,8 +93,8 @@ The implementation is inspired by the MATLAB code for IPCA made available on [Se
 
 -----
 
-The package is still in the development phase, hence please share your comments and suggestions with me.
+The package is still in the development phase, hence please share your comments and suggestions with us.
 
 Contributions welcome!
 
-\- **Matthias Buechner**
+\- **Matthias Buechner, Leland Bybee**

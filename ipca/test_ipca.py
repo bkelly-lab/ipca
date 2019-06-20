@@ -3,6 +3,7 @@ import numpy as np
 from sklearn.utils.testing import assert_raises
 from statsmodels.datasets import grunfeld
 import time
+from datetime import datetime
 
 from ipca import IPCARegressor
 
@@ -30,90 +31,107 @@ data = data.to_numpy()
 PSF = np.random.randn(len(np.unique(data[:, 1])), 2)
 PSF = PSF.reshape((2, -1))
 
+data_x = np.delete(data, 2, axis=1)
+data_y = data[:,2]
 
+t0 = datetime.now()
 
 # Test IPCARegressor
 regr = IPCARegressor(n_factors=1, intercept=False)
-Gamma_New, Factor_New = regr.fit(Panel=data)
-print('R2total', regr.r2_total)
-print('R2pred', regr.r2_pred)
-print('R2total_x', regr.r2_total_x)
-print('R2pred_x', regr.r2_pred_x)
-print(Gamma_New)
-print(Factor_New)
+regr = regr.fit(X=data_x, y=data_y)
+print("R2total", regr.score(X=data_x, y=data_y))
+print("R2pred", regr.score(X=data_x, y=data_y, mean_factor=True))
+print("R2total_x", regr.score(X=data_x, y=data_y, data_type="portfolio"))
+print("R2pred_x", regr.score(X=data_x, y=data_y, mean_factor=True,
+                             data_type="portfolio"))
+print(regr.Gamma)
+print(regr.Factors)
 
 
 # Test IPCARegressor with intercept
 regr = IPCARegressor(n_factors=1, intercept=True)
-Gamma_New, Factor_New = regr.fit(Panel=data)
-print('R2total', regr.r2_total)
-print('R2pred', regr.r2_pred)
-print('R2total_x', regr.r2_total_x)
-print('R2pred_x', regr.r2_pred_x)
-
+regr = regr.fit(X=data_x, y=data_y)
+print("R2total", regr.score(X=data_x, y=data_y))
+print("R2pred", regr.score(X=data_x, y=data_y, mean_factor=True))
+print("R2total_x", regr.score(X=data_x, y=data_y, data_type="portfolio"))
+print("R2pred_x", regr.score(X=data_x, y=data_y, mean_factor=True,
+                             data_type="portfolio"))
 
 # Use the fitted regressor to predict
-data_x = np.delete(data, 2, axis=1)
-Ypred = regr.predict(Panel=data_x)
+Ypred = regr.predict(X=data_x)
 
 # Test refitting the IPCARegressor with previous data but different n_factors
 regr.n_factors = 2
 regr.intercept = False
-Gamma_New, Factor_New = regr.fit(Panel=data, refit=True)
+regr = regr.fit(X=data_x, y=data_y)
 
-# Test refitting the IPCARegressor on new data
-data_refit = data[data[:, 1] != 1954, :]
-Gamma_New, Factor_New = regr.fit(Panel=data_refit, refit=False)
+# Test different data-type fits
+regr = IPCARegressor(n_factors=1, intercept=True)
+regr = regr.fit(X=data_x, y=data_y, data_type="panel")
+regr = IPCARegressor(n_factors=1, intercept=True)
+regr = regr.fit(X=data_x, y=data_y, data_type="portfolio")
 
 # Test PSF - one additional factor estimated
 PSF = np.random.randn(len(np.unique(data[:, 1])), 1)
 PSF = PSF.reshape((1, -1))
 regr = IPCARegressor(n_factors=2, intercept=False)
-Gamma_New, Factor_New = regr.fit(Panel=data, PSF=PSF, refit=False)
+regr = regr.fit(X=data_x, y=data_y, PSF=PSF)
 
 # Test PSF - no additional factors estimated
 PSF = np.random.randn(len(np.unique(data[:, 1])), 2)
 PSF = PSF.reshape((2, -1))
 regr = IPCARegressor(n_factors=2, intercept=False)
-Gamma_New, Factor_New = regr.fit(Panel=data, PSF=PSF, refit=False)
+regr = regr.fit(X=data_x, y=data_y, PSF=PSF)
 
 # Test nan observations
 regr = IPCARegressor(n_factors=1, intercept=True)
-data_nan = data.copy()
+data_nan = data_x.copy()
 data_nan[10:30, 2:] = np.nan
-Gamma_New, Factor_New = regr.fit(Panel=data_nan)
+regr = regr.fit(X=data_nan, y=data_y)
 
 # Test missing observations
 regr = IPCARegressor(n_factors=1, intercept=True)
-data_missing = data.copy()
+data_missing = data_x.copy()
 data_missing = data_missing[:-10, :]
-Gamma_New, Factor_New = regr.fit(Panel=data_missing)
+regr = regr.fit(X=data_x, y=data_y)
 
 # Simulate OOS experiment
-# In-sample data excludes observations during last available date
-data_IS = data[data[:, 1] != 1954, :]
-# Out-of-sample consists only of observation at last available date
-data_OOS = data[data[:, 1] == 1954, :]
+y_IS = data_y[data_x[:,1] != 1954]
+y_OOS = data_y[data_x[:,1] == 1954]
+data_IS = data_x[data_x[:, 1] != 1954, :]
+data_OOS = data_x[data_x[:, 1] == 1954, :]
 # Re-fit the regressor
-regr.fit(Panel=data_IS)
-Ypred = regr.predictOOS(Panel=data_OOS, mean_factor=True)
+regr = regr.fit(X=data_IS, y=y_IS)
+Ypred = regr.predictOOS(X=data_OOS, y=y_OOS, mean_factor=True)
 
 # Test Walpha Bootstrap
 regr = IPCARegressor(n_factors=1, intercept=True)
-Gamma_New, Factor_New = regr.fit(Panel=data)
+regr = regr.fit(X=data_x, y=data_y)
 pval = regr.BS_Walpha(ndraws=10, n_jobs=-1)
 print('p-value', pval)
 
 # Test Wbeta Bootstrap
 regr = IPCARegressor(n_factors=1, intercept=False)
-Gamma_New, Factor_New = regr.fit(Panel=data)
+regr = regr.fit(X=data_x, y=data_y)
 pval = regr.BS_Wbeta([0, 1], ndraws=10, n_jobs=-1)
 print('p-value', pval)
 
 # Test with regularization
-regr = IPCARegressor(n_factors=2, intercept=False)
-Gamma_New, Factor_New = regr.fit(Panel=data, alpha=0.5)
-Gamma_New, Factor_New = regr.fit(Panel=data, alpha=0.5, l1_ratio=0.5)
-Gamma_New, Factor_New = regr.fit(Panel=data, PSF=PSF, alpha=0.5)
+regr = IPCARegressor(n_factors=2, alpha=0.5, intercept=False)
+regr = regr.fit(X=data_x, y=data_y)
+regr = IPCARegressor(n_factors=2, alpha=0.5, l1_ratio=0.5, intercept=False)
+regr = regr.fit(X=data_x, y=data_y)
+regr = IPCARegressor(n_factors=2, alpha=0.5, intercept=False)
+regr = regr.fit(X=data_x, y=data_y, PSF=PSF)
 regr = IPCARegressor(n_factors=1, intercept=True)
-Gamma_New, Factor_New = regr.fit(Panel=data, alpha=0.5)
+regr = regr.fit(X=data_x, y=data_y)
+
+# Test regularization path
+regr = IPCARegressor(n_factors=2)
+cvmse = regr.fit_path(X=data_x, y=data_y)
+cvmse = regr.fit_path(X=data_x, y=data_y, alpha_l=np.array([0., 0.5, 1.]))
+cvmse = regr.fit_path(X=data_x, y=data_y, PSF=PSF)
+cvmse = regr.fit_path(X=data_x, y=data_y, PSF=PSF,
+                      alpha_l=np.array([0., 0.5, 1.]))
+
+print(datetime.now() - t0)
