@@ -261,6 +261,17 @@ class IPCARegressor(BaseEstimator):
             y = y[non_nan_ind]
             X = X[non_nan_ind]
 
+        # handle data type, since we are doing regularized estimation
+        # only the panel fit makes sense here
+        if "data_type" in kwargs:
+            data_type = kwargs.pop("data_type")
+        else:
+            data_type = "panel"
+        if data_type == "portfolio":
+            raise ValueError("Unsupported data_type for fit_path: \
+                              'portfolio'. Regularized estimation is only \
+                              implemented for 'panel' data_type currently")
+
         # init alphas
         if alpha_l is None:
             alpha_l = np.linspace(0.0, 1., 100)
@@ -270,11 +281,11 @@ class IPCARegressor(BaseEstimator):
             cvmse = Parallel(n_jobs=n_jobs, backend=backend)(
                         delayed(_fit_cv)(
                         self, X, y, PSF, n_splits, split_method, alpha,
-                        **kwargs)
+                        data_type=data_type, **kwargs)
                         for alpha in alpha_l)
         else:
             cvmse = [_fit_cv(self, X, y, PSF, n_splits, split_method, alpha,
-                             **kwargs)
+                             data_type=data_type, **kwargs)
                      for alpha in alpha_l]
 
         cvmse = np.stack(cvmse)
