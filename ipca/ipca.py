@@ -1222,7 +1222,6 @@ def _BS_Wbeta_sub(model, n, d, l):
     Gamma_beta_l = np.copy(model.Gamma)
     Gamma_beta_l[l, :] = 0
 
-    # Re-estimate unrestricted model
     Gamma = None
     while Gamma is None:
         try:
