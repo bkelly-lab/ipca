@@ -63,6 +63,10 @@ class IPCARegressor(BaseEstimator):
             raise NotImplementedError('intercept must be  boolean')
         if not isinstance(iter_tol, float) or iter_tol >= 1:
             raise ValueError('Iteration tolerance must be smaller than 1.')
+        if l1_ratio > 1. or l1_ratio < 0.:
+            raise ValueError("l1_ratio must be between 0 and 1")
+        if alpha < 0.:
+            raise ValueError("alpha must be greater than or equal to 0")
 
         # Save parameters to the object
         params = locals()
@@ -104,10 +108,27 @@ class IPCARegressor(BaseEstimator):
             If provided, starting values for Factors (see Notes)
 
         data_type : str
-            label for data-type used for ALS estimation, can be one of:
+            label for data-type used for ALS estimation, one of the following:
 
             1. panel
+
+            ALS uses the untransformed X and y for the estimation.
+
+            This is currently marginally slower than the portfolio estimation
+            but is necessary when performing regularized estimation
+            (alpha > 0).
+
             2. portfolio
+
+            ALS uses a matrix of characteristic weighted portfolios (Q)
+            as well as a matrix of weights (W) and count of non-missing
+            observations for each time period (val_obs) for the estimation.
+
+            See _unpack_panel for details on how these variables are formed
+            from the initial X and y.
+
+            Currently, the bootstrap procedure is only implemented in terms
+            of the portfolio data_type.
 
         Returns
         -------
