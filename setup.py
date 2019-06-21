@@ -1,11 +1,11 @@
 from setuptools import setup
 
 setup(name='ipca',
-      version='0.6.2',
+      version='0.6.4',
       description='Implements the IPCA method of Kelly, Pruitt, Su (2017)',
       url='https://github.com/bkelly-lab/ipca',
-      author='Matthias Buechner',
-      author_email='matthias.buechner.16@mail.wbs.ac.uk',
+      author='Matthias Buechner, Leland Bybee',
+      author_email='mat.buechner@gmail.com, leland.bybee@gmail.com',
       license='MIT',
       keywords=['ipca', 'regression', 'IV', 'instrumental variable'],
       packages=['ipca'],
