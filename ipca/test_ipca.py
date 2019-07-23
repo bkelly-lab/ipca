@@ -5,15 +5,15 @@ from statsmodels.datasets import grunfeld
 import time
 from datetime import datetime
 
-from ipca import IPCARegressor
+from ipca import InstrumentedPCA
 
 
 # Test Construction Errors
 @pytest.mark.fast_test
 def test_construction_errors():
-    assert_raises(ValueError, IPCARegressor, n_factors=0)
-    assert_raises(NotImplementedError, IPCARegressor, intercept='jabberwocky')
-    assert_raises(ValueError, IPCARegressor, iter_tol=2)
+    assert_raises(ValueError, InstrumentedPCA, n_factors=0)
+    assert_raises(NotImplementedError, InstrumentedPCA, intercept='jabberwocky')
+    assert_raises(ValueError, InstrumentedPCA, iter_tol=2)
 
 
 # Create test data and run package
@@ -36,8 +36,8 @@ data_y = data[:,2]
 
 t0 = datetime.now()
 
-# Test IPCARegressor
-regr = IPCARegressor(n_factors=1, intercept=False)
+# Test InstrumentedPCA
+regr = InstrumentedPCA(n_factors=1, intercept=False)
 regr = regr.fit(X=data_x, y=data_y)
 print("R2total", regr.score(X=data_x, y=data_y))
 print("R2pred", regr.score(X=data_x, y=data_y, mean_factor=True))
@@ -48,8 +48,8 @@ print(regr.Gamma)
 print(regr.Factors)
 
 
-# Test IPCARegressor with intercept
-regr = IPCARegressor(n_factors=1, intercept=True)
+# Test InstrumentedPCA with intercept
+regr = InstrumentedPCA(n_factors=1, intercept=True)
 regr = regr.fit(X=data_x, y=data_y)
 print("R2total", regr.score(X=data_x, y=data_y))
 print("R2pred", regr.score(X=data_x, y=data_y, mean_factor=True))
@@ -60,37 +60,37 @@ print("R2pred_x", regr.score(X=data_x, y=data_y, mean_factor=True,
 # Use the fitted regressor to predict
 Ypred = regr.predict(X=data_x)
 
-# Test refitting the IPCARegressor with previous data but different n_factors
+# Test refitting the InstrumentedPCA with previous data but different n_factors
 regr.n_factors = 2
 regr.intercept = False
 regr = regr.fit(X=data_x, y=data_y)
 
 # Test different data-type fits
-regr = IPCARegressor(n_factors=1, intercept=True)
+regr = InstrumentedPCA(n_factors=1, intercept=True)
 regr = regr.fit(X=data_x, y=data_y, data_type="panel")
-regr = IPCARegressor(n_factors=1, intercept=True)
+regr = InstrumentedPCA(n_factors=1, intercept=True)
 regr = regr.fit(X=data_x, y=data_y, data_type="portfolio")
 
 # Test PSF - one additional factor estimated
 PSF = np.random.randn(len(np.unique(data[:, 1])), 1)
 PSF = PSF.reshape((1, -1))
-regr = IPCARegressor(n_factors=2, intercept=False)
+regr = InstrumentedPCA(n_factors=2, intercept=False)
 regr = regr.fit(X=data_x, y=data_y, PSF=PSF)
 
 # Test PSF - no additional factors estimated
 PSF = np.random.randn(len(np.unique(data[:, 1])), 2)
 PSF = PSF.reshape((2, -1))
-regr = IPCARegressor(n_factors=2, intercept=False)
+regr = InstrumentedPCA(n_factors=2, intercept=False)
 regr = regr.fit(X=data_x, y=data_y, PSF=PSF)
 
 # Test nan observations
-regr = IPCARegressor(n_factors=1, intercept=True)
+regr = InstrumentedPCA(n_factors=1, intercept=True)
 data_nan = data_x.copy()
 data_nan[10:30, 2:] = np.nan
 regr = regr.fit(X=data_nan, y=data_y)
 
 # Test missing observations
-regr = IPCARegressor(n_factors=1, intercept=True)
+regr = InstrumentedPCA(n_factors=1, intercept=True)
 data_missing = data_x.copy()
 data_missing = data_missing[:-10, :]
 regr = regr.fit(X=data_x, y=data_y)
@@ -105,29 +105,29 @@ regr = regr.fit(X=data_IS, y=y_IS)
 Ypred = regr.predictOOS(X=data_OOS, y=y_OOS, mean_factor=True)
 
 # Test Walpha Bootstrap
-regr = IPCARegressor(n_factors=1, intercept=True)
+regr = InstrumentedPCA(n_factors=1, intercept=True)
 regr = regr.fit(X=data_x, y=data_y)
 pval = regr.BS_Walpha(ndraws=10, n_jobs=-1)
 print('p-value', pval)
 
 # Test Wbeta Bootstrap
-regr = IPCARegressor(n_factors=1, intercept=False)
+regr = InstrumentedPCA(n_factors=1, intercept=False)
 regr = regr.fit(X=data_x, y=data_y)
 pval = regr.BS_Wbeta([0, 1], ndraws=10, n_jobs=-1)
 print('p-value', pval)
 
 # Test with regularization
-regr = IPCARegressor(n_factors=2, alpha=0.5, intercept=False)
+regr = InstrumentedPCA(n_factors=2, alpha=0.5, intercept=False)
 regr = regr.fit(X=data_x, y=data_y)
-regr = IPCARegressor(n_factors=2, alpha=0.5, l1_ratio=0.5, intercept=False)
+regr = InstrumentedPCA(n_factors=2, alpha=0.5, l1_ratio=0.5, intercept=False)
 regr = regr.fit(X=data_x, y=data_y)
-regr = IPCARegressor(n_factors=2, alpha=0.5, intercept=False)
+regr = InstrumentedPCA(n_factors=2, alpha=0.5, intercept=False)
 regr = regr.fit(X=data_x, y=data_y, PSF=PSF)
-regr = IPCARegressor(n_factors=1, intercept=True)
+regr = InstrumentedPCA(n_factors=1, intercept=True)
 regr = regr.fit(X=data_x, y=data_y)
 
 # Test regularization path
-regr = IPCARegressor(n_factors=2)
+regr = InstrumentedPCA(n_factors=2)
 cvmse = regr.fit_path(X=data_x, y=data_y)
 cvmse = regr.fit_path(X=data_x, y=data_y, alpha_l=np.array([0., 0.5, 1.]))
 cvmse = regr.fit_path(X=data_x, y=data_y, PSF=PSF)

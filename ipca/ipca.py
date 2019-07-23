@@ -4,13 +4,14 @@ from sklearn.linear_model import ElasticNet
 from sklearn.metrics import r2_score
 from joblib import Parallel, delayed
 from numba import jit
+import pandas as pd
 import numpy as np
 import scipy as sp
 import progressbar
 import warnings
 import time
 
-class IPCARegressor(BaseEstimator):
+class InstrumentedPCA(BaseEstimator):
     """
     This class implements the IPCA algorithm by Kelly, Pruitt, Su (2017).
 
@@ -75,28 +76,38 @@ class IPCARegressor(BaseEstimator):
                 setattr(self, k, v)
 
 
-    def fit(self, X=None, y=None, PSF=None, Gamma=None, Factors=None,
-            data_type="portfolio", **kwargs):
+    def fit(self, X=None, y=None, indices=None, PSF=None, Gamma=None,
+            Factors=None, data_type="portfolio", **kwargs):
         """
         Fits the regressor to the data using an alternating least squares
         scheme.
 
         Parameters
         ----------
-        X :  numpy array
-            X of stacked data. Each row corresponds to an observation
-            (i, t) where i denotes the entity index and t denotes
-            the time index. The panel may be unbalanced. The number of unique
-            entities is n_samples, the number of unique dates is T, and
-            the number of characteristics used as instruments is L.
-            The columns of the panel are organized in the following order:
+        X :  numpy array or pandas DataFrame
+            matrix of characteristics where each row corresponds to a
+            entity-time pair in indices.  The number of characteristics
+            (columns here) used as instruments is L.
+
+            If given as a DataFrame, we assume that it contains a mutliindex
+            mapping to each entity-time pair
+
+        y : numpy array or pandas Series
+            dependent variable where indices correspond to those in X
+
+            If given as a Series, we assume that it contains a mutliindex
+            mapping to each entity-time pair
+
+        indices : numpy array
+            array containing the panel indices.  Should consist of two
+            columns:
 
             - Column 1: entity id (i)
             - Column 2: time index (t)
-            - Column 3 to column 3+L: characteristics.
 
-        y : numpy array
-            dependent variable where indices correspond to those in X
+            The panel may be unbalanced. The number of unique entities is
+            n_samples, the number of unique dates is T, and the number of
+            characteristics used as instruments is L.
 
         PSF : numpy array, optional
             Set of pre-specified factors as matrix of dimension (M, T)
@@ -124,7 +135,7 @@ class IPCARegressor(BaseEstimator):
             as well as a matrix of weights (W) and count of non-missing
             observations for each time period (val_obs) for the estimation.
 
-            See _unpack_panel for details on how these variables are formed
+            See _build_portfolio for details on how these variables are formed
             from the initial X and y.
 
             Currently, the bootstrap procedure is only implemented in terms
@@ -155,27 +166,18 @@ class IPCARegressor(BaseEstimator):
 
         """
 
-        # Check panel input
-        if X is None:
-            raise ValueError('Must pass panel input data.')
-        else:
-            # remove panel rows containing missing obs
-            non_nan_ind = ~np.any(np.isnan(X), axis=1)
-            y = y[non_nan_ind]
-            X = X[non_nan_ind]
+        # handle input
+        X, y, indices, dates, ids, T, N, L = _unpack_input(X, y, indices)
 
         # set data_type to panel if doing regularized estimation
         if self.alpha > 0.:
             data_type = "panel"
 
-        # init data dimensions
-        self = self._init_dimensions(X)
-
         # Handle pre-specified factors
         if PSF is not None:
-            if np.size(PSF, axis=1) != np.size(np.unique(X[:, 1])):
+            if np.size(PSF, axis=1) != np.size(dates):
                 raise ValueError("""Number of PSF observations must match
-                                 number of unique dates in panel X""")
+                                 number of unique dates""")
             self.has_PSF = True
         else:
             self.has_PSF = False
@@ -192,9 +194,9 @@ class IPCARegressor(BaseEstimator):
         if self.intercept:
             self.n_factors_eff = self.n_factors + 1
             if PSF is not None:
-                PSF = np.concatenate((PSF, np.ones((1, self.T))), axis=0)
+                PSF = np.concatenate((PSF, np.ones((1, T))), axis=0)
             elif PSF is None:
-                PSF = np.ones((1, self.T))
+                PSF = np.ones((1, T))
         else:
             self.n_factors_eff = self.n_factors
 
@@ -210,23 +212,25 @@ class IPCARegressor(BaseEstimator):
         self.PSFcase = True if self.has_PSF or self.intercept else False
 
         # store data
-        self.X, self.y, self.PSF = X, y, PSF
-        self.Q, self.W, self.val_obs = _unpack_panel(X, y)
+        self.dates, self.ids, self.T, self.N, self.L = dates, ids, T, N, L
+        self.X, self.y, self.indices, self.PSF = X, y, indices, PSF
+        self.Q, self.W, self.val_obs = _build_portfolio(X, y)
 
         # Run IPCA
-        Gamma, Factors = self._fit_ipca(X=self.X, y=self.y, Q=self.Q,
-                                        W=self.W, val_obs=self.val_obs,
-                                        PSF=self.PSF, Gamma=Gamma,
-                                        Factors=Factors, data_type=data_type,
-                                        **kwargs)
+        Gamma, Factors = self._fit_ipca(X=X, y=y, indices=indices, Q=Q,
+                                        W=W, val_obs=val_obs, PSF=PSF,
+                                        Gamma=Gamma, Factors=Factors,
+                                        data_type=data_type, **kwargs)
+
+        # TODO add indices to Gamma/Factors
 
         # Store estimates
         if self.PSFcase:
             if self.intercept and self.has_PSF:
-                PSF = np.concatenate((PSF, np.ones((1, len(self.dates)))),
+                PSF = np.concatenate((PSF, np.ones((1, len(dates)))),
                                      axis=0)
             elif self.intercept:
-                PSF = np.ones((1, len(self.dates)))
+                PSF = np.ones((1, len(dates)))
             if Factors is not None:
                 Factors = np.concatenate((Factors, PSF), axis=0)
             else:
@@ -237,26 +241,35 @@ class IPCARegressor(BaseEstimator):
         return self
 
 
-    def fit_path(self, X=None, y=None, PSF=None, alpha_l=None, n_splits=10,
-                 split_method=GroupKFold, n_jobs=1, backend="loky", **kwargs):
+    def fit_path(self, X=None, y=None, indices=None, PSF=None, alpha_l=None,
+                 n_splits=10, split_method=GroupKFold, n_jobs=1,
+                 backend="loky", **kwargs):
         """Fit a path of elastic net fits for various regularizing constants
 
         Parameters
         ----------
-        X :  numpy array
-            X of stacked data. Each row corresponds to an observation
-            (i, t) where i denotes the entity index and t denotes
-            the time index. The panel may be unbalanced. The number of unique
-            entities is n_samples, the number of unique dates is T, and
-            the number of characteristics used as instruments is L.
-            The columns of the panel are organized in the following order:
+        X :  numpy array or pandas DataFrame
+            matrix of characteristics where each row corresponds to a
+            entity-time pair in indices.  The number of characteristics
+            (columns here) used as instruments is L.
+
+            If given as a DataFrame, we assume that it contains a mutliindex
+            mapping to each entity-time pair
+        y : numpy array or pandas Series
+            dependent variable where indices correspond to those in X
+
+            If given as a Series, we assume that it contains a mutliindex
+            mapping to each entity-time pair
+        indices : numpy array
+            array containing the panel indices.  Should consist of two
+            columns:
 
             - Column 1: entity id (i)
             - Column 2: time index (t)
-            - Column 3 to column 3+L: characteristics.
 
-        y : numpy array
-            dependent variable where indices correspond to those in X
+            The panel may be unbalanced. The number of unique entities is
+            n_samples, the number of unique dates is T, and the number of
+            characteristics used as instruments is L.
         PSF : numpy array, optional
             Set of pre-specified factors as matrix of dimension (M, T)
         alpha_l : iterable or None
@@ -277,14 +290,8 @@ class IPCARegressor(BaseEstimator):
             constants and C is the number of CV partitions
         """
 
-        # Check panel input
-        if X is None:
-            raise ValueError('Must pass panel input data.')
-        else:
-            # remove panel rows containing missing obs
-            non_nan_ind = ~np.any(np.isnan(X), axis=1)
-            y = y[non_nan_ind]
-            X = X[non_nan_ind]
+        # handle input
+        X, y, indices, dates, ids, T, N, L = _unpack_input(X, y, indices)
 
         # handle data type, since we are doing regularized estimation
         # only the panel fit makes sense here
@@ -305,12 +312,13 @@ class IPCARegressor(BaseEstimator):
         if n_jobs > 1:
             cvmse = Parallel(n_jobs=n_jobs, backend=backend)(
                         delayed(_fit_cv)(
-                        self, X, y, PSF, n_splits, split_method, alpha,
-                        data_type=data_type, **kwargs)
+                        self, X, y, indices, PSF, n_splits, split_method,
+                        alpha, data_type=data_type, **kwargs)
                         for alpha in alpha_l)
         else:
-            cvmse = [_fit_cv(self, X, y, PSF, n_splits, split_method, alpha,
-                             data_type=data_type, **kwargs)
+            cvmse = [_fit_cv(self, X, y, indices, PSF, n_splits,
+                             split_method, alpha, data_type=data_type,
+                             **kwargs)
                      for alpha in alpha_l]
 
         cvmse = np.stack(cvmse)
@@ -319,40 +327,103 @@ class IPCARegressor(BaseEstimator):
         return cvmse
 
 
-    def predict(self, X=None, y=None, mean_factor=False, data_type="panel"):
-        """wrapper around different data type predict methods"""
+    def predict(self, X=None, y=None, indices=None, mean_factor=False,
+                data_type="panel"):
+        """wrapper around different data type predict methods
+
+        Parameters
+        ----------
+        X :  numpy array or pandas DataFrame or None
+            matrix of characteristics where each row corresponds to a
+            entity-time pair in indices.  The number of characteristics
+            (columns here) used as instruments is L.
+
+            If given as a DataFrame, we assume that it contains a mutliindex
+            mapping to each entity-time pair
+
+            If None we use the values associated with the current model
+
+        y : numpy array or pandas Series or None
+            dependent variable where indices correspond to those in X
+
+            If given as a Series, we assume that it contains a mutliindex
+            mapping to each entity-time pair
+
+            If None we use the values associated with the current model
+
+        indices : numpy array or None
+            array containing the panel indices.  Should consist of two
+            columns:
+
+            - Column 1: entity id (i)
+            - Column 2: time index (t)
+
+            The panel may be unbalanced. The number of unique entities is
+            n_samples, the number of unique dates is T, and the number of
+            characteristics used as instruments is L.
+
+            If None we use the values associated with the current model
+
+        mean_factor: boolean
+            If true, the estimated factors are averaged in the time-series
+            before prediction.
+
+        data_type : str
+            label for data-type used for prediction, one of the following:
+
+            1. panel
+
+            Uses the untransformed X and y for the estimation.
+
+            2. portfolio
+
+            Uses a matrix of characteristic weighted portfolios (Q)
+            as well as a matrix of weights (W) and count of non-missing
+            observations for each time period (val_obs) for the estimation.
+
+            See _build_portfolio for details on how these variables are formed
+            from the initial X and y.
+        """
+
+        if indices is None and X is None and y is None:
+            X, y, indices = self.X, self.y, self.indices
 
         if data_type == "panel":
-            return self.predict_panel(X, mean_factor)
+            return self.predict_panel(X, indices, mean_factor)
         elif data_type == "portfolio":
             return self.predict_portfolio(X, y, mean_factor)
         else:
             raise ValueError("Unsupported data_type: %s" % data_type)
 
 
-    def predict_panel(self, X=None, mean_factor=False):
+    def predict_panel(self, X=None, indices=None, mean_factor=False):
         """
         Predicts fitted values for a previously fitted regressor + panel data
 
         Parameters
         ----------
         X :  numpy array
-            X of stacked data. Each row corresponds to an observation
-            (i, t) where i denotes the entity index and t denotes
-            the time index. The panel may be unbalanced. If an observation
-            contains missing data NaN will be returned. Note that the
-            number of passed characteristics L must match the
-            number of characteristics used when fitting the regressor.
-            The columns of the panel are organized in the following order:
+            matrix of characteristics where each row corresponds to a
+            entity-time pair in indices.  The number of characteristics
+            (columns here) used as instruments is L.
+
+        y : numpy array
+            dependent variable where indices correspond to those in X
+
+        indices : numpy array
+            array containing the panel indices.  Should consist of two
+            columns:
 
             - Column 1: entity id (i)
             - Column 2: time index (t)
-            - Column 3 to column 3+L: characteristics.
+
+            The panel may be unbalanced. The number of unique entities is
+            n_samples, the number of unique dates is T, and the number of
+            characteristics used as instruments is L.
 
         mean_factor: boolean
             If true, the estimated factors are averaged in the time-series
             before prediction.
-
 
         Returns
         -------
@@ -363,26 +434,21 @@ class IPCARegressor(BaseEstimator):
             characteristics information.
         """
 
-        if X is None:
-            raise ValueError("""A panel of characteristics data must be
-                              provided.""")
-
-        if np.any(np.isnan(X)):
-            raise ValueError("""Cannot contain missing observations / nan
-                              values.""")
-        N = np.size(X, axis=0)
+        X, y, indices, dates, ids, T, N, L = _unpack_input(X, y, indices)
         ypred = np.full((N), np.nan)
 
         mean_Factors = np.mean(self.Factors, axis=1).reshape((-1, 1))
 
         if mean_factor:
-            ypred[:] = np.squeeze(X[:, 2:].dot(self.Gamma)\
+            ypred[:] = np.squeeze(X.dot(self.Gamma)\
                 .dot(mean_Factors))
+        elif dates.shape[0] != self.Factors.shape[1]:
+            raise ValueError("If mean_factor isn't used date shape must align
+                              with Factors shape")
         else:
-
-            for t_i, t in enumerate(self.dates):
-                ix = (X[:, 1] == t)
-                ypred[ix] = np.squeeze(X[ix, 2:].dot(self.Gamma)\
+            for t_i, t in enumerate(dates):
+                ix = (indices[:, 1] == t)
+                ypred[ix] = np.squeeze(X[ix, :].dot(self.Gamma)\
                     .dot(self.Factors[:, t_i]))
         return ypred
 
@@ -394,21 +460,12 @@ class IPCARegressor(BaseEstimator):
         Parameters
         ----------
         X :  numpy array
-            X of stacked data. Each row corresponds to an observation
-            (i, t) where i denotes the entity index and t denotes
-            the time index. The panel may be unbalanced. If an observation
-            contains missing data NaN will be returned. Note that the
-            number of passed characteristics L must match the
-            number of characteristics used when fitting the regressor.
-            The columns of the panel are organized in the following order:
-
-            - Column 1: entity id (i)
-            - Column 2: time index (t)
-            - Column 3 to column 3+L: characteristics.
+            matrix of characteristics where each row corresponds to a
+            entity-time pair in indices.  The number of characteristics
+            (columns here) used as instruments is L.
 
         y : numpy array
-            dependent variable where indices correspond to those in X.
-            Needed to unwrap panel.
+            dependent variable where indices correspond to those in X
 
         mean_factor: boolean
             If true, the estimated factors are averaged in the time-series
@@ -421,24 +478,21 @@ class IPCARegressor(BaseEstimator):
             Same dimensions as a char formed portfolios (Q)
         """
 
-        if X is None:
-            raise ValueError("""A panel of characteristics data must be
-                              provided.""")
-
-        if np.any(np.isnan(X)):
-            raise ValueError("""Cannot contain missing observations / nan
-                              values.""")
-
-        Q, W, val_obs = _unpack_panel(X, y)
+        X, y, indices, dates, ids, T, N, L = _unpack_input(X, y, indices)
+        Q, W, val_obs = _build_portfolio(X, y)
 
         # Compute goodness of fit measures, portfolio level
         Num_tot, Denom_tot, Num_pred, Denom_pred = 0, 0, 0, 0
+
+        if not mean_factor and dates.shape[0] != self.Factors.shape[1]:
+            raise ValueError("If mean_factor isn't used date shape must align
+                              with Factors shape")
 
         if mean_factor:
             mean_Factors = np.mean(self.Factors, axis=1).reshape((-1, 1))
 
         Ypred = np.full((N, T), np.nan)
-        for t_i, t in enumerate(self.dates):
+        for t_i, t in enumerate(dates):
 
             if mean_factor:
                 ypred = self.W[:, :, t_i].dot(self.Gamma).dot(mean_Factors)
@@ -452,10 +506,11 @@ class IPCARegressor(BaseEstimator):
         return Ypred
 
 
-    def score(self, X=None, y=None, mean_factor=False, data_type="panel"):
+    def score(self, X=None, y=None, indices=None, mean_factor=False,
+              data_type="panel"):
         """generate the panel R^2"""
 
-        yhat = self.predict(X, mean_factor, data_type)
+        yhat = self.predict(X, indices, mean_factor, data_type)
         return r2_score(y, yhat)
 
 
@@ -574,7 +629,7 @@ class IPCARegressor(BaseEstimator):
         return pval
 
 
-    def predictOOS(self, X=None, y=None, mean_factor=False):
+    def predictOOS(self, X=None, y=None, indices=None, mean_factor=False):
         """
         Predicts time t+1 observation using an out-of-sample design.
 
@@ -598,6 +653,17 @@ class IPCARegressor(BaseEstimator):
         y : numpy array
             dependent variable where indices correspond to those in X
 
+        indices : numpy array
+            array containing the panel indices.  Should consist of two
+            columns:
+
+            - Column 1: entity id (i)
+            - Column 2: time index (t)
+
+            The panel may be unbalanced. The number of unique entities is
+            n_samples, the number of unique dates is T, and the number of
+            characteristics used as instruments is L.
+
         mean_factor: boolean
             If true, the estimated factors are averaged in the time-series
             before prediction.
@@ -616,7 +682,7 @@ class IPCARegressor(BaseEstimator):
             raise ValueError("""A panel of characteristics data must be
                               provided.""")
 
-        if len(np.unique(X[:, 1])) > 1:
+        if len(np.unique(indices[:, 1])) > 1:
             raise ValueError('The panel must only have a single timestamp.')
 
         N = np.size(X, axis=0)
@@ -639,8 +705,8 @@ class IPCARegressor(BaseEstimator):
         return ypred
 
 
-    def _fit_ipca(self, X=None, y=None, PSF=None, Q=None, W=None,
-                  val_obs=None, Gamma=None, Factors=None, quiet=False,
+    def _fit_ipca(self, X=None, y=None, indices=None, PSF=None, Q=None,
+                  W=None, val_obs=None, Gamma=None, Factors=None, quiet=False,
                   data_type="portfolio", **kwargs):
         """
         Fits the regressor to the data using alternating least squares
@@ -648,16 +714,24 @@ class IPCARegressor(BaseEstimator):
         Parameters
         ----------
 
-        X : None or X of data.
+        X :  numpy array
+            matrix of characteristics where each row corresponds to a
+            entity-time pair in indices.  The number of characteristics
+            (columns here) used as instruments is L.
 
-                Each row corresponds to an observation (i, t).
-                The columns are ordered in the following manner:
-                COLUMN 1: entity id (i)
-                COLUMN 2: time index (t)
-                COLUMN 3 and following: L characteristics
-
-        y : None or numpy array
+        y : numpy array
             dependent variable where indices correspond to those in X
+
+        indices : numpy array
+            array containing the panel indices.  Should consist of two
+            columns:
+
+            - Column 1: entity id (i)
+            - Column 2: time index (t)
+
+            The panel may be unbalanced. The number of unique entities is
+            n_samples, the number of unique dates is T, and the number of
+            characteristics used as instruments is L.
 
         PSF : None or array-like of shape (M, T), i.e.
             pre-specified factors
@@ -703,7 +777,7 @@ class IPCARegressor(BaseEstimator):
         """
 
         if data_type == "panel":
-            ALS_inputs = (X, y)
+            ALS_inputs = (X, y, indices)
             ALS_fit = self._ALS_fit_panel
         elif data_type == "portfolio":
             ALS_inputs = (Q, W, val_obs)
@@ -839,7 +913,7 @@ class IPCARegressor(BaseEstimator):
         return Gamma_New, F_New
 
 
-    def _ALS_fit_panel(self, Gamma_Old, X, y, PSF=None, **kwargs):
+    def _ALS_fit_panel(self, Gamma_Old, X, y, indices, PSF=None, **kwargs):
         """Alternating least squares procedure to fit params
 
         Runs using panel data as input
@@ -863,7 +937,7 @@ class IPCARegressor(BaseEstimator):
             K = Ktilde - K_PSF
 
         # prep T-ind for iteration
-        Tind = [np.where(X[:,1] == dates[t])[0] for t in range(T)]
+        Tind = [np.where(indices[:,1] == dates[t])[0] for t in range(T)]
 
         # ALS Step 1
         if K > 0:
@@ -889,8 +963,8 @@ class IPCARegressor(BaseEstimator):
                 if self.n_jobs > 1:
                     F_New = Parallel(n_jobs=n_jobs, backend=backend)(
                                 delayed(_Ft_fit_PSF_panel)(
-                                    Gamma_Old, X[tind,:], y[tind], PSF[:,t],
-                                    K, Ktilde)
+                                    Gamma_Old, X[tind,:], y[tind],
+                                    PSF[:,t], K, Ktilde)
                                 for t, tind in enumerate(Tind))
                     F_New = np.stack(F_New, axis=1)
 
@@ -898,14 +972,14 @@ class IPCARegressor(BaseEstimator):
                     F_New = np.full((K, T), np.nan)
                     for t, tind in enumerate(Tind):
                         F_New[:,t] = _Ft_fit_PSF_panel(Gamma_Old, X[tind,:],
-                                                       y[tind], PSF[:,t], K,
-                                                       Ktilde)
+                                                       y[tind], PSF[:,t],
+                                                       K, Ktilde)
 
         else:
             F_New = None
 
         # ALS Step 2
-        Gamma_New = _Gamma_fit_panel(F_New, X, y, PSF, L, Ktilde,
+        Gamma_New = _Gamma_fit_panel(F_New, X, y, indices, PSF, L, Ktilde,
                                      self.alpha, self.l1_ratio, **kwargs)
 
         # condition checks
@@ -928,52 +1002,115 @@ class IPCARegressor(BaseEstimator):
         return Gamma_New, F_New
 
 
-    def _init_dimensions(self, X):
-        """given panel data X and y initialize the dimensions of data
+def _unpack_input(X, y, indices):
+    """handle mapping from different inputs type to consistent internal data
 
-        Parameters
-        ----------
+    Parameters
+    ----------
+    X :  numpy array or pandas DataFrame
+        matrix of characteristics where each row corresponds to a
+        entity-time pair in indices.  The number of characteristics
+        (columns here) used as instruments is L.
 
-        X : X of data. Each row corresponds to an observation (i, t).
-                The columns are ordered in the following manner:
-                COLUMN 1: entity id (i)
-                COLUMN 2: time index (t)
-                COLUMN 3 and following: L characteristics
+        If given as a DataFrame, we assume that it contains a mutliindex
+        mapping to each entity-time pair
 
-        Returns
-        -------
-        self
+    y : numpy array or pandas Series
+        dependent variable where indices correspond to those in X
 
-        Notes
-        -----
-        updates IPCARegressor instance to include dimension info for X:
+        If given as a Series, we assume that it contains a mutliindex
+        mapping to each entity-time pair
 
-        dates : array-like
-            unique dates in panel
+    indices : numpy array
+        array containing the panel indices.  Should consist of two
+        columns:
 
-        ids : array-like
-            unique ids in panel
+        - Column 1: entity id (i)
+        - Column 2: time index (t)
 
-        T : scalar
-            number of time periods
+        The panel may be unbalanced. The number of unique entities is
+        n_samples, the number of unique dates is T, and the number of
+        characteristics used as instruments is L.
 
-        N : scalar
-            number of ids
+    Returns
+    -------
+    X :  numpy array
+        matrix of characteristics where each row corresponds to a
+        entity-time pair in indices.  The number of characteristics
+        (columns here) used as instruments is L.
 
-        L : scalar
-            total number of characteristics
-        """
+    y : numpy array
+        dependent variable where indices correspond to those in X
 
-        self.dates = np.unique(X[:, 1])
-        self.ids = np.unique(X[:, 0])
-        self.T = np.size(self.dates, axis=0)
-        self.N = np.size(self.ids, axis=0)
-        self.L = np.size(X, axis=1) - 2
+    indices : numpy array
+        array containing the panel indices.  Should consist of two
+        columns:
 
-        return self
+        - Column 1: entity id (i)
+        - Column 2: time index (t)
+
+        The panel may be unbalanced. The number of unique entities is
+        n_samples, the number of unique dates is T, and the number of
+        characteristics used as instruments is L.
+
+    dates : array-like
+        unique dates in panel
+
+    ids : array-like
+        unique ids in panel
+
+    T : scalar
+        number of time periods
+
+    N : scalar
+        number of ids
+
+    L : scalar
+        total number of characteristics
+    """
+
+    # Check panel input
+    if X is None:
+        raise ValueError('Must pass panel input data.')
+    else:
+        # remove panel rows containing missing obs
+        non_nan_ind = ~np.any(np.isnan(X), axis=1)
+        y = y[non_nan_ind]
+        X = X[non_nan_ind]
+
+    # if data-frames passed, break out indices from data
+    if isinstance(X, pd.DataFrame) and not isinstance(y, pd.Series):
+        indices = X.index.values
+        X = X.values
+    elif not isinstance(X, pd.DataFrame) and isinstance(y, pd.Series):
+        indices = y.index.values
+        y = y.values
+    elif isinstance(X, pd.DataFrame) and isinstance(y, pd.Series):
+        Xind = X.index.values
+        yind = y.index.values
+        X = X.values
+        y = y.values
+        if Xind != yind:
+            raise ValueError("If indices are provided with both X and y
+                              they be the same")
+    else:
+        indices = None
+
+    if indices is None:
+        raise ValueError("entity-time indices must be provided either
+                          separately or as a MultiIndex with X/y")
+
+    # init data dimensions
+    dates = np.unique(indices[:, 1])
+    ids = np.unique(indices[:, 0])
+    T = np.size(dates, axis=0)
+    N = np.size(ids, axis=0)
+    L = np.size(X, axis=1)
+
+    return X, y, indices, dates, ids, T, N, L
 
 
-def _unpack_panel(X, y):
+def _build_portfolio(X, y, indices):
     """ Converts a stacked panel of data where each row corresponds to an
     observation (i, t) into a tensor of dimensions (N, L, T) where N is the
     number of unique entities, L is the number of characteristics and T is
@@ -981,15 +1118,24 @@ def _unpack_panel(X, y):
 
     Parameters
     ----------
-
-    X : X of data. Each row corresponds to an observation (i, t).
-            The columns are ordered in the following manner:
-            COLUMN 1: entity id (i)
-            COLUMN 2: time index (t)
-            COLUMN 3 and following: L characteristics
+    X :  numpy array
+        matrix of characteristics where each row corresponds to a
+        entity-time pair in indices.  The number of characteristics
+        (columns here) used as instruments is L.
 
     y : numpy array
         dependent variable where indices correspond to those in X
+
+    indices : numpy array
+        array containing the panel indices.  Should consist of two
+        columns:
+
+        - Column 1: entity id (i)
+        - Column 2: time index (t)
+
+        The panel may be unbalanced. The number of unique entities is
+        n_samples, the number of unique dates is T, and the number of
+        characteristics used as instruments is L.
 
     Returns
     -------
@@ -1005,8 +1151,8 @@ def _unpack_panel(X, y):
         observations at each point in time
     """
 
-    dates = np.unique(X[:,1])
-    ids = np.unique(X[:,0])
+    dates = np.unique(indices[:,1])
+    ids = np.unique(indices[:,0])
     T = np.size(dates, axis=0)
     N = np.size(ids, axis=0)
     L = np.size(X, axis=1) - 2
@@ -1022,11 +1168,14 @@ def _unpack_panel(X, y):
     W = np.full((L, L, T), np.nan)
     val_obs = np.full((T), np.nan)
     for t_i, t in enumerate(dates):
-        ixt = (X[:, 1] == t)
+        ixt = (indices[:, 1] == t)
         val_obs[t_i] = np.sum(ixt)
         # Define characteristics weighted matrices
-        Q[:, t_i] = X[ixt, 2:].T.dot(y[ixt])/val_obs[t_i]
-        W[:, :, t_i] = X[ixt, 2:].T.dot(X[ixt, 2:])/val_obs[t_i]
+        print(ixt)
+        print(val_obs)
+        print(t_i)
+        Q[:, t_i] = X[ixt, :].T.dot(y[ixt])/val_obs[t_i]
+        W[:, :, t_i] = X[ixt, :].T.dot(X[ixt, :])/val_obs[t_i]
         bar.update(t_i)
     bar.finish()
 
@@ -1056,7 +1205,7 @@ def _Ft_fit_PSF_portfolio(Gamma_Old, W_t, Q_t, PSF_t, K, Ktilde):
 def _Ft_fit_panel(Gamma_Old, X_t, y_t):
     """fits F_t using panel data"""
 
-    exog_t = X_t[:,2:].dot(Gamma_Old)
+    exog_t = X_t.dot(Gamma_Old)
     Ft = _numba_lstsq(exog_t, y_t)[0]
 
     return Ft
@@ -1065,7 +1214,7 @@ def _Ft_fit_panel(Gamma_Old, X_t, y_t):
 def _Ft_fit_PSF_panel(Gamma_Old, X_t, y_t, PSF_t, K, Ktilde):
     """fits F_t using panel data with PSF"""
 
-    exog_t = X_t[:,2:].dot(Gamma_Old)
+    exog_t = X_t.dot(Gamma_Old)
     y_t_resid = y_t - exog_t[:,K:Ktilde].dot(PSF_t)
     Ft = _numba_lstsq(exog_t[:,:K], y_t_resid)[0]
 
@@ -1119,7 +1268,8 @@ def _Gamma_fit_portfolio(F_New, Q, W, val_obs, PSF, L, K, Ktilde, T):
     return Gamma_New
 
 
-def _Gamma_fit_panel(F_New, X, y, PSF, L, Ktilde, alpha, l1_ratio, **kwargs):
+def _Gamma_fit_panel(F_New, X, y, indices, PSF, L, Ktilde, alpha, l1_ratio,
+                     **kwargs):
     """helper function for estimating vectorized Gamma with panel"""
 
     # join observed factors with latent factors and map to panel
@@ -1130,10 +1280,10 @@ def _Gamma_fit_panel(F_New, X, y, PSF, L, Ktilde, alpha, l1_ratio, **kwargs):
             F = PSF
         else:
             F = np.vstack((F_New, PSF))
-    F = F[:,np.unique(X[:,1], return_inverse=True)[1]]
+    F = F[:,np.unique(indices[:,1], return_inverse=True)[1]]
 
     # interact factors and characteristics
-    ZkF = np.hstack((F[k,:,None] * X[:,2:] for k in range(Ktilde)))
+    ZkF = np.hstack((F[k,:,None] * X for k in range(Ktilde)))
 
     # elastic net fit
     if alpha:
@@ -1151,7 +1301,8 @@ def _Gamma_fit_panel(F_New, X, y, PSF, L, Ktilde, alpha, l1_ratio, **kwargs):
     return gamma
 
 
-def _fit_cv(model, X, y, PSF, n_splits, split_method, alpha, **kwargs):
+def _fit_cv(model, X, y, indices, PSF, n_splits, split_method, alpha,
+            **kwargs):
     """inner function for fit_path doing CV
 
     Parameters
@@ -1159,19 +1310,21 @@ def _fit_cv(model, X, y, PSF, n_splits, split_method, alpha, **kwargs):
     model : IPCA model instance
         contains the params
     X :  numpy array
-        X of stacked data. Each row corresponds to an observation
-        (i, t) where i denotes the entity index and t denotes
-        the time index. The panel may be unbalanced. The number of unique
-        entities is n_samples, the number of unique dates is T, and
-        the number of characteristics used as instruments is L.
-        The columns of the panel are organized in the following order:
+        matrix of characteristics where each row corresponds to a
+        entity-time pair in indices.  The number of characteristics
+        (columns here) used as instruments is L.
+    y : numpy array
+        dependent variable where indices correspond to those in X
+    indices : numpy array
+        array containing the panel indices.  Should consist of two
+        columns:
 
         - Column 1: entity id (i)
         - Column 2: time index (t)
-        - Column 3 to column 3+L: characteristics.
 
-    y : numpy array
-        dependent variable where indices correspond to those in X
+        The panel may be unbalanced. The number of unique entities is
+        n_samples, the number of unique dates is T, and the number of
+        characteristics used as instruments is L.
     PSF : numpy array, optional
         Set of pre-specified factors as matrix of dimension (M, T)
     n_splits : scalar
@@ -1195,19 +1348,21 @@ def _fit_cv(model, X, y, PSF, n_splits, split_method, alpha, **kwargs):
     mse_l = []
     split = split_method(n_splits=n_splits)
 
-    full_tind = np.unique(X[:,1])
+    full_tind = np.unique(indices[:,1])
 
-    for train, test in split.split(X, groups=X[:,0]):
+    for train, test in split.split(X, groups=indices[:,0]):
 
         # build partitioned model
         train_X = X[train,:]
-        test_X = X[test,:]
+        train_indices = indices[train,:]
         train_y = y[train]
+        test_X = X[test,:]
+        test_indices = indices[test,:]
         test_y = y[test]
         if PSF is None:
             train_PSF = None
         else:
-            train_tind = np.unique(train_X[:,1])
+            train_tind = np.unique(train_indices[:,1])
             train_tind = np.where(np.isin(full_tind, train_tind))[0]
             train_PSF = PSF[:,train_tind]
 
@@ -1215,10 +1370,11 @@ def _fit_cv(model, X, y, PSF, n_splits, split_method, alpha, **kwargs):
         params = model.get_params()
         params["alpha"] = alpha
         train_IPCA = IPCARegressor(**params)
-        train_IPCA = train_IPCA.fit(train_X, train_y, train_PSF, **kwargs)
+        train_IPCA = train_IPCA.fit(train_X, train_y, train_indices,
+                                    train_PSF, **kwargs)
 
         # get MSE
-        test_pred = train_IPCA.predict(test_X, mean_factor=True)
+        test_pred = train_IPCA.predict(test_X, test_indices, mean_factor=True)
         mse = np.sum(np.square(test_y - test_pred))
         mse /= test_pred.shape[0]
         mse_l.append(mse)
