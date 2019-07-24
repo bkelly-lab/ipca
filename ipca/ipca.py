@@ -22,7 +22,7 @@ class InstrumentedPCA(BaseEstimator):
         The total number of factors to estimate. Note, the number of
         estimated factors is automatically reduced by the number of
         pre-specified factors. For example, if n_factors = 2 and one
-        pre-specified factor is passed, then IPCARegressor will estimate
+        pre-specified factor is passed, then InstrumentedPCA will estimate
         one factor estimated in addition to the pre-specified factor.
 
     intercept : boolean, default=False
@@ -147,7 +147,7 @@ class InstrumentedPCA(BaseEstimator):
 
         Notes
         -----
-        Updates IPCARegressor instances to include param estimates:
+        Updates InstrumentedPCA instances to include param estimates:
 
         Gamma : numpy array
             Array with dimensions (L, n_factors) containing the
@@ -326,7 +326,7 @@ class InstrumentedPCA(BaseEstimator):
         return cvmse
 
 
-    def predict(self, X=None, y=None, indices=None, mean_factor=False,
+    def predict(self, X=None, indices=None, W=None, mean_factor=False,
                 data_type="panel"):
         """wrapper around different data type predict methods
 
@@ -338,14 +338,6 @@ class InstrumentedPCA(BaseEstimator):
             (columns here) used as instruments is L.
 
             If given as a DataFrame, we assume that it contains a mutliindex
-            mapping to each entity-time pair
-
-            If None we use the values associated with the current model
-
-        y : numpy array or pandas Series or None
-            dependent variable where indices correspond to those in X
-
-            If given as a Series, we assume that it contains a mutliindex
             mapping to each entity-time pair
 
             If None we use the values associated with the current model
@@ -362,6 +354,9 @@ class InstrumentedPCA(BaseEstimator):
             characteristics used as instruments is L.
 
             If None we use the values associated with the current model
+
+        W : numpy array
+            portfolio weight matrix of dimension (L, L, T)
 
         mean_factor: boolean
             If true, the estimated factors are averaged in the time-series
@@ -384,18 +379,41 @@ class InstrumentedPCA(BaseEstimator):
             from the initial X and y.
         """
 
-        if indices is None and X is None and y is None:
-            X, y, indices = self.X, self.y, self.indices
-
         if data_type == "panel":
-            return self.predict_panel(X, y, indices, mean_factor)
+
+            if X is None:
+                X, indices, T, L = self.X, self.indices, self.T, self.L
+            else:
+                X, y, indices, dates, ids, T, N, L = _unpack_input(X, None,
+                                                                   indices)
+
+            return self.predict_panel(X, indices, T, mean_factor)
+
         elif data_type == "portfolio":
-            return self.predict_portfolio(X, y, indices, mean_factor)
+
+            if W is not None:
+                L = W.shape[0]
+                T = W.shape[2]
+            elif X is not None:
+                X, y, indices, dates, ids, T, N, L = _unpack_input(X, None,
+                                                                   indices)
+                Q, W, val_obs = _build_portfolio(X, None, indices, T, N, L)
+            elif hasattr(self, "W"):
+                W = self.W
+                L = W.shape[0]
+                T = W.shape[2]
+            else:
+                X, indices = self.X, self.indices
+                T, N, L = self.T, self.N, self.L
+                Q, W, val_obs = _build_portfolio(X, None, indices, T, N, L)
+
+            return self.predict_portfolio(W, L, T, mean_factor)
+
         else:
             raise ValueError("Unsupported data_type: %s" % data_type)
 
 
-    def predict_panel(self, X=None, y=None, indices=None, mean_factor=False):
+    def predict_panel(self, X, indices, T, mean_factor=False):
         """
         Predicts fitted values for a previously fitted regressor + panel data
 
@@ -406,9 +424,6 @@ class InstrumentedPCA(BaseEstimator):
             entity-time pair in indices.  The number of characteristics
             (columns here) used as instruments is L.
 
-        y : numpy array
-            dependent variable where indices correspond to those in X
-
         indices : numpy array
             array containing the panel indices.  Should consist of two
             columns:
@@ -420,31 +435,31 @@ class InstrumentedPCA(BaseEstimator):
             n_samples, the number of unique dates is T, and the number of
             characteristics used as instruments is L.
 
+        T : scalar
+            number of time periods in X
+
         mean_factor: boolean
             If true, the estimated factors are averaged in the time-series
             before prediction.
 
         Returns
         -------
-
         ypred : numpy array
             The length of the returned array matches the
             the length of data. A nan will be returned if there is missing
             characteristics information.
         """
 
-        X, y, indices, dates, ids, T, N, L = _unpack_input(X, y, indices)
-        ypred = np.full((N), np.nan)
-
         mean_Factors = np.mean(self.Factors, axis=1).reshape((-1, 1))
 
         if mean_factor:
-            ypred[:] = np.squeeze(X.dot(self.Gamma)\
+            ypred = np.squeeze(X.dot(self.Gamma)\
                 .dot(mean_Factors))
-        elif dates.shape[0] != self.Factors.shape[1]:
+        elif T != self.Factors.shape[1]:
             raise ValueError("If mean_factor isn't used date shape must align\
                               with Factors shape")
         else:
+            ypred = np.full((X.shape[0]), np.nan)
             for t in range(T):
                 ix = (indices[:, 1] == t)
                 ypred[ix] = np.squeeze(X[ix, :].dot(self.Gamma)\
@@ -452,31 +467,20 @@ class InstrumentedPCA(BaseEstimator):
         return ypred
 
 
-    def predict_portfolio(self, X=None, y=None, indices=None,
-                          mean_factor=False):
+    def predict_portfolio(self, W, L, T, mean_factor=False):
         """
         Predicts fitted values for a previously fitted regressor + portfolios
 
         Parameters
         ----------
-        X :  numpy array
-            matrix of characteristics where each row corresponds to a
-            entity-time pair in indices.  The number of characteristics
-            (columns here) used as instruments is L.
+        W : numpy array
+            portfolio weight matrix of dimension (L, L, T)
 
-        y : numpy array
-            dependent variable where indices correspond to those in X
+        L : scalar
+            number of characteristics
 
-        indices : numpy array
-            array containing the panel indices.  Should consist of two
-            columns:
-
-            - Column 1: entity id (i)
-            - Column 2: time index (t)
-
-            The panel may be unbalanced. The number of unique entities is
-            n_samples, the number of unique dates is T, and the number of
-            characteristics used as instruments is L.
+        T : scalar
+            number of time periods
 
         mean_factor: boolean
             If true, the estimated factors are averaged in the time-series
@@ -484,45 +488,64 @@ class InstrumentedPCA(BaseEstimator):
 
         Returns
         -------
-
-        Ypred : numpy array
+        Qpred : numpy array
             Same dimensions as a char formed portfolios (Q)
         """
-
-        X, y, indices, dates, ids, T, N, L = _unpack_input(X, y, indices)
-        Q, W, val_obs = _build_portfolio(X, y, indices, T, N, L)
 
         # Compute goodness of fit measures, portfolio level
         Num_tot, Denom_tot, Num_pred, Denom_pred = 0, 0, 0, 0
 
-        if not mean_factor and dates.shape[0] != self.Factors.shape[1]:
+        if not mean_factor and T != self.Factors.shape[1]:
             raise ValueError("If mean_factor isn't used date shape must align\
                               with Factors shape")
 
         if mean_factor:
             mean_Factors = np.mean(self.Factors, axis=1).reshape((-1, 1))
 
-        Ypred = np.full((N, T), np.nan)
-        for t_i, t in enumerate(dates):
+        Qpred = np.full((L, T), np.nan)
+        for t in range(T):
 
             if mean_factor:
-                ypred = self.W[:, :, t_i].dot(self.Gamma).dot(mean_Factors)
-                ypred = np.squeeze(ypred)
-                Ypred[:,t_i] = ypred
+                qpred = W[:, :, t].dot(self.Gamma).dot(mean_Factors)
+                qpred = np.squeeze(qpred)
+                Qpred[:,t] = qpred
             else:
-                ypred = self.W[:, :, t_i].dot(self.Gamma)\
-                    .dot(self.Factors[:, t_i])
-                Ypred[:,t_i] = ypred
+                qpred = W[:, :, t].dot(self.Gamma)\
+                    .dot(self.Factors[:, t])
+                Qpred[:,t] = qpred
 
-        return Ypred
+        return Qpred
 
 
-    def score(self, X=None, y=None, indices=None, mean_factor=False,
+    def score(self, X, y=None, indices=None, mean_factor=False,
               data_type="panel"):
-        """generate the panel R^2"""
+        """generate R^2"""
 
-        yhat = self.predict(X, indices, mean_factor, data_type)
-        return r2_score(y, yhat)
+        if data_type == "panel":
+
+            X, y, indices, dates, ids, T, N, L = _unpack_input(X, y, indices)
+            if y is None:
+                y = self.y
+
+            yhat = self.predict(X=X, indices=indices,
+                                mean_factor=mean_factor,
+                                data_type="panel")
+
+            return r2_score(y, yhat)
+
+        elif data_type == "portfolio":
+
+            X, y, indices, dates, ids, T, N, L = _unpack_input(X, y, indices)
+            if y is None:
+                y = self.y
+            Q, W, val_obs = _build_portfolio(X, y, indices, T, N, L)
+
+            Qhat = self.predict(W=W, mean_factor=mean_factor,
+                                data_type="portfolio")
+            return r2_score(Q, Qhat)
+
+        else:
+            return ValueError("Unsupported data_type: %s" % data_type)
 
 
     def BS_Walpha(self, ndraws=1000, n_jobs=1, backend='loky'):
@@ -1096,8 +1119,6 @@ def _unpack_input(X, y=None, indices=None):
             raise ValueError("If indices are provided with both X and y\
                               they be the same")
         indices = Xind
-    else:
-        indices = None
 
     if indices is None:
         raise ValueError("entity-time indices must be provided either\
@@ -1132,8 +1153,10 @@ def _build_portfolio(X, y, indices, T, N, L):
         entity-time pair in indices.  The number of characteristics
         (columns here) used as instruments is L.
 
-    y : numpy array
+    y : numpy array or None
         dependent variable where indices correspond to those in X
+
+        If None, we just build the portfolio info for ind vars
 
     indices : numpy array
         array containing the panel indices.  Should consist of two
@@ -1157,16 +1180,20 @@ def _build_portfolio(X, y, indices, T, N, L):
 
     Returns
     -------
-    Q: array-like
+    Q: array-like or None
         matrix of dimensions (L, T), containing the characteristics
         weighted portfolios
 
-    W: array-like
+    W: array-like or None
         matrix of dimension (L, L, T)
 
     val_obs: array-like
         matrix of dimension (T), containting the number of non missing
         observations at each point in time
+
+    Notes
+    -----
+    TBA expalin the potentially None X, y
     """
 
     print('The panel dimensions are:')
@@ -1176,19 +1203,30 @@ def _build_portfolio(X, y, indices, T, N, L):
                                   widgets=[progressbar.Bar('=', '[', ']'),
                                            ' ', progressbar.Percentage()])
     bar.start()
-    Q = np.full((L, T), np.nan)
+
+    # init portfolio outputs based on input type
+    if y is not None:
+        Q = np.full((L, T), np.nan)
+    else:
+        Q = None
     W = np.full((L, L, T), np.nan)
     val_obs = np.full((T), np.nan)
-    for t in range(T):
-        ixt = (indices[:, 1] == t)
-        val_obs[t] = np.sum(ixt)
-        # Define characteristics weighted matrices
-        print(ixt)
-        print(val_obs)
-        print(t)
-        Q[:, t] = X[ixt, :].T.dot(y[ixt])/val_obs[t]
-        W[:, :, t] = X[ixt, :].T.dot(X[ixt, :])/val_obs[t]
-        bar.update(t)
+
+    if y is None:
+        for t in range(T):
+            ixt = (indices[:, 1] == t)
+            val_obs[t] = np.sum(ixt)
+            W[:, :, t] = X[ixt, :].T.dot(X[ixt, :])/val_obs[t]
+            bar.update(t)
+
+    else:
+        for t in range(T):
+            ixt = (indices[:, 1] == t)
+            val_obs[t] = np.sum(ixt)
+            Q[:, t] = X[ixt, :].T.dot(y[ixt])/val_obs[t]
+            W[:, :, t] = X[ixt, :].T.dot(X[ixt, :])/val_obs[t]
+            bar.update(t)
+
     bar.finish()
 
     # return portfolio data
@@ -1295,7 +1333,7 @@ def _Gamma_fit_panel(F_New, X, y, indices, PSF, L, Ktilde, alpha, l1_ratio,
     F = F[:,indices[:,1]]
 
     # interact factors and characteristics
-    ZkF = np.hstack((F[k,:,None] * X for k in range(Ktilde)))
+    ZkF = np.hstack([F[k,:,None] * X for k in range(Ktilde)])
 
     # elastic net fit
     if alpha:
@@ -1380,7 +1418,7 @@ def _fit_cv(model, X, y, indices, PSF, n_splits, split_method, alpha,
         # init new training model
         params = model.get_params()
         params["alpha"] = alpha
-        train_IPCA = IPCARegressor(**params)
+        train_IPCA = InstrumentedPCA(**params)
         train_IPCA = train_IPCA.fit(train_X, train_y, train_indices,
                                     train_PSF, **kwargs)
 

@@ -26,12 +26,14 @@ ID = dict(zip(np.unique(data.firm).tolist(), np.arange(1, N+1)+5))
 data.firm = data.firm.apply(lambda x: ID[x])
 # Ensure that ordering of the data is correct
 data = data[['firm', 'year', 'invest', 'value', 'capital']]
-PSF = np.random.randn(len(np.unique(data.loc[:, 'year'])), 2)
-PSF = PSF.reshape((2, -1))
+# prep PSF test vars test vars
+PSF1 = np.random.randn(len(np.unique(data.loc[:, 'year'])), 1)
+PSF1 = PSF1.reshape((1, -1))
+PSF2 = np.random.randn(len(np.unique(data.loc[:, 'year'])), 2)
+PSF2 = PSF2.reshape((2, -1))
 data = data.set_index(['firm', 'year'])
 data_y = data['invest']
 data_x = data.drop('invest', axis=1)
-print(data_y.shape, data_x.shape)
 
 t0 = datetime.now()
 
@@ -48,7 +50,7 @@ print(regr.Factors)
 
 # test indices
 regr = InstrumentedPCA(n_factors=1, intercept=False)
-regr = regr.fit(X=data_x.values, y=data_y.values, indices=data_x.index.values)
+regr = regr.fit(X=data_x.values, y=data_y.values, indices=data_x.index)
 print("R2total", regr.score(X=data_x.values, y=data_y.values,
                             indices=data_x.index))
 print("R2pred", regr.score(X=data_x.values, y=data_y.values,
@@ -88,34 +90,30 @@ regr = InstrumentedPCA(n_factors=1, intercept=True)
 regr = regr.fit(X=data_x, y=data_y, data_type="portfolio")
 
 # Test PSF - one additional factor estimated
-PSF = np.random.randn(len(np.unique(data[:, 1])), 1)
-PSF = PSF.reshape((1, -1))
 regr = InstrumentedPCA(n_factors=2, intercept=False)
-regr = regr.fit(X=data_x, y=data_y, PSF=PSF)
+regr = regr.fit(X=data_x, y=data_y, PSF=PSF1)
 
 # Test PSF - no additional factors estimated
-PSF = np.random.randn(len(np.unique(data[:, 1])), 2)
-PSF = PSF.reshape((2, -1))
 regr = InstrumentedPCA(n_factors=2, intercept=False)
-regr = regr.fit(X=data_x, y=data_y, PSF=PSF)
+regr = regr.fit(X=data_x, y=data_y, PSF=PSF2)
 
 # Test nan observations
 regr = InstrumentedPCA(n_factors=1, intercept=True)
 data_nan = data_x.copy()
-data_nan[10:30, 2:] = np.nan
+data_nan.iloc[10:30, :] = np.nan
 regr = regr.fit(X=data_nan, y=data_y)
 
 # Test missing observations
 regr = InstrumentedPCA(n_factors=1, intercept=True)
 data_missing = data_x.copy()
-data_missing = data_missing[:-10, :]
+data_missing = data_missing.iloc[:-10, :]
 regr = regr.fit(X=data_x, y=data_y)
 
 # Simulate OOS experiment
-y_IS = data_y[data_x[:,1] != 1954]
-y_OOS = data_y[data_x[:,1] == 1954]
-data_IS = data_x[data_x[:, 1] != 1954, :]
-data_OOS = data_x[data_x[:, 1] == 1954, :]
+y_IS = data_y[data_x.index.get_level_values("year") != 1954]
+y_OOS = data_y[data_x.index.get_level_values("year") == 1954]
+data_IS = data_x[data_x.index.get_level_values("year") != 1954]
+data_OOS = data_x[data_x.index.get_level_values("year") == 1954]
 # Re-fit the regressor
 regr = regr.fit(X=data_IS, y=y_IS)
 Ypred = regr.predictOOS(X=data_OOS, y=y_OOS, mean_factor=True)
@@ -138,7 +136,7 @@ regr = regr.fit(X=data_x, y=data_y)
 regr = InstrumentedPCA(n_factors=2, alpha=0.5, l1_ratio=0.5, intercept=False)
 regr = regr.fit(X=data_x, y=data_y)
 regr = InstrumentedPCA(n_factors=2, alpha=0.5, intercept=False)
-regr = regr.fit(X=data_x, y=data_y, PSF=PSF)
+regr = regr.fit(X=data_x, y=data_y, PSF=PSF1)
 regr = InstrumentedPCA(n_factors=1, intercept=True)
 regr = regr.fit(X=data_x, y=data_y)
 
@@ -146,8 +144,8 @@ regr = regr.fit(X=data_x, y=data_y)
 regr = InstrumentedPCA(n_factors=2)
 cvmse = regr.fit_path(X=data_x, y=data_y)
 cvmse = regr.fit_path(X=data_x, y=data_y, alpha_l=np.array([0., 0.5, 1.]))
-cvmse = regr.fit_path(X=data_x, y=data_y, PSF=PSF)
-cvmse = regr.fit_path(X=data_x, y=data_y, PSF=PSF,
+cvmse = regr.fit_path(X=data_x, y=data_y, PSF=PSF1)
+cvmse = regr.fit_path(X=data_x, y=data_y, PSF=PSF1,
                       alpha_l=np.array([0., 0.5, 1.]))
 
 print(datetime.now() - t0)
