@@ -201,7 +201,7 @@ class InstrumentedPCA(BaseEstimator):
             self.n_factors_eff = self.n_factors
 
         # Check that enough features provided
-        if np.size(X, axis=1) - 2 < self.n_factors_eff:
+        if np.size(X, axis=1) < self.n_factors_eff:
             raise ValueError("""The number of factors requested exceeds number
                               of features""")
 
@@ -214,15 +214,14 @@ class InstrumentedPCA(BaseEstimator):
         # store data
         self.dates, self.ids, self.T, self.N, self.L = dates, ids, T, N, L
         self.X, self.y, self.indices, self.PSF = X, y, indices, PSF
-        self.Q, self.W, self.val_obs = _build_portfolio(X, y)
+        Q, W, val_obs = _build_portfolio(X, y, indices, T, N, L)
+        self.Q, self.W, self.val_obs = Q, W, val_obs
 
         # Run IPCA
         Gamma, Factors = self._fit_ipca(X=X, y=y, indices=indices, Q=Q,
                                         W=W, val_obs=val_obs, PSF=PSF,
                                         Gamma=Gamma, Factors=Factors,
                                         data_type=data_type, **kwargs)
-
-        # TODO add indices to Gamma/Factors
 
         # Store estimates
         if self.PSFcase:
@@ -389,14 +388,14 @@ class InstrumentedPCA(BaseEstimator):
             X, y, indices = self.X, self.y, self.indices
 
         if data_type == "panel":
-            return self.predict_panel(X, indices, mean_factor)
+            return self.predict_panel(X, y, indices, mean_factor)
         elif data_type == "portfolio":
-            return self.predict_portfolio(X, y, mean_factor)
+            return self.predict_portfolio(X, y, indices, mean_factor)
         else:
             raise ValueError("Unsupported data_type: %s" % data_type)
 
 
-    def predict_panel(self, X=None, indices=None, mean_factor=False):
+    def predict_panel(self, X=None, y=None, indices=None, mean_factor=False):
         """
         Predicts fitted values for a previously fitted regressor + panel data
 
@@ -443,17 +442,18 @@ class InstrumentedPCA(BaseEstimator):
             ypred[:] = np.squeeze(X.dot(self.Gamma)\
                 .dot(mean_Factors))
         elif dates.shape[0] != self.Factors.shape[1]:
-            raise ValueError("If mean_factor isn't used date shape must align
+            raise ValueError("If mean_factor isn't used date shape must align\
                               with Factors shape")
         else:
-            for t_i, t in enumerate(dates):
+            for t in range(T):
                 ix = (indices[:, 1] == t)
                 ypred[ix] = np.squeeze(X[ix, :].dot(self.Gamma)\
-                    .dot(self.Factors[:, t_i]))
+                    .dot(self.Factors[:, t]))
         return ypred
 
 
-    def predict_portfolio(self, X=None, y=None, mean_factor=False):
+    def predict_portfolio(self, X=None, y=None, indices=None,
+                          mean_factor=False):
         """
         Predicts fitted values for a previously fitted regressor + portfolios
 
@@ -467,6 +467,17 @@ class InstrumentedPCA(BaseEstimator):
         y : numpy array
             dependent variable where indices correspond to those in X
 
+        indices : numpy array
+            array containing the panel indices.  Should consist of two
+            columns:
+
+            - Column 1: entity id (i)
+            - Column 2: time index (t)
+
+            The panel may be unbalanced. The number of unique entities is
+            n_samples, the number of unique dates is T, and the number of
+            characteristics used as instruments is L.
+
         mean_factor: boolean
             If true, the estimated factors are averaged in the time-series
             before prediction.
@@ -479,13 +490,13 @@ class InstrumentedPCA(BaseEstimator):
         """
 
         X, y, indices, dates, ids, T, N, L = _unpack_input(X, y, indices)
-        Q, W, val_obs = _build_portfolio(X, y)
+        Q, W, val_obs = _build_portfolio(X, y, indices, T, N, L)
 
         # Compute goodness of fit measures, portfolio level
         Num_tot, Denom_tot, Num_pred, Denom_pred = 0, 0, 0, 0
 
         if not mean_factor and dates.shape[0] != self.Factors.shape[1]:
-            raise ValueError("If mean_factor isn't used date shape must align
+            raise ValueError("If mean_factor isn't used date shape must align\
                               with Factors shape")
 
         if mean_factor:
@@ -678,29 +689,19 @@ class InstrumentedPCA(BaseEstimator):
             characteristics information.
         """
 
-        if X is None:
-            raise ValueError("""A panel of characteristics data must be
-                              provided.""")
-
-        if len(np.unique(indices[:, 1])) > 1:
-            raise ValueError('The panel must only have a single timestamp.')
-
-        N = np.size(X, axis=0)
+        X, y, indices, dates, ids, T, N, L = _unpack_input(X, y, indices)
         ypred = np.full((N), np.nan)
 
-        # Unpack the panel into Z
-        Z = X[:, 2:]
-
         # Compute realized factor returns
-        Numer = self.Gamma.T.dot(Z.T).dot(y)
-        Denom = self.Gamma.T.dot(Z.T).dot(Z).dot(self.Gamma)
+        Numer = self.Gamma.T.dot(X.T).dot(y)
+        Denom = self.Gamma.T.dot(X.T).dot(X).dot(self.Gamma)
         Factor_OOS = np.linalg.solve(Denom, Numer.reshape((-1, 1)))
 
         if mean_factor:
-            ypred = np.squeeze(Z.dot(self.Gamma)\
+            ypred = np.squeeze(X.dot(self.Gamma)\
                     .dot(np.mean(self.Factors, axis=1).reshape((-1, 1))))
         else:
-            ypred = np.diag(Z.dot(self.Gamma).dot(Factor_OOS))
+            ypred = np.diag(X.dot(self.Gamma).dot(Factor_OOS))
 
         return ypred
 
@@ -937,7 +938,7 @@ class InstrumentedPCA(BaseEstimator):
             K = Ktilde - K_PSF
 
         # prep T-ind for iteration
-        Tind = [np.where(indices[:,1] == dates[t])[0] for t in range(T)]
+        Tind = [np.where(indices[:,1] == t)[0] for t in range(T)]
 
         # ALS Step 1
         if K > 0:
@@ -1002,7 +1003,7 @@ class InstrumentedPCA(BaseEstimator):
         return Gamma_New, F_New
 
 
-def _unpack_input(X, y, indices):
+def _unpack_input(X, y=None, indices=None):
     """handle mapping from different inputs type to consistent internal data
 
     Parameters
@@ -1015,13 +1016,13 @@ def _unpack_input(X, y, indices):
         If given as a DataFrame, we assume that it contains a mutliindex
         mapping to each entity-time pair
 
-    y : numpy array or pandas Series
+    y : numpy array or pandas Series or None
         dependent variable where indices correspond to those in X
 
         If given as a Series, we assume that it contains a mutliindex
         mapping to each entity-time pair
 
-    indices : numpy array
+    indices : numpy array or pandas MultiIndex or None
         array containing the panel indices.  Should consist of two
         columns:
 
@@ -1075,34 +1076,42 @@ def _unpack_input(X, y, indices):
     else:
         # remove panel rows containing missing obs
         non_nan_ind = ~np.any(np.isnan(X), axis=1)
-        y = y[non_nan_ind]
         X = X[non_nan_ind]
+        if y is not None:
+            y = y[non_nan_ind]
 
     # if data-frames passed, break out indices from data
     if isinstance(X, pd.DataFrame) and not isinstance(y, pd.Series):
-        indices = X.index.values
+        indices = X.index
         X = X.values
     elif not isinstance(X, pd.DataFrame) and isinstance(y, pd.Series):
-        indices = y.index.values
+        indices = y.index
         y = y.values
     elif isinstance(X, pd.DataFrame) and isinstance(y, pd.Series):
-        Xind = X.index.values
-        yind = y.index.values
+        Xind = X.index
+        yind = y.index
         X = X.values
         y = y.values
-        if Xind != yind:
-            raise ValueError("If indices are provided with both X and y
+        if not np.array_equal(Xind, yind):
+            raise ValueError("If indices are provided with both X and y\
                               they be the same")
+        indices = Xind
     else:
         indices = None
 
     if indices is None:
-        raise ValueError("entity-time indices must be provided either
+        raise ValueError("entity-time indices must be provided either\
                           separately or as a MultiIndex with X/y")
 
-    # init data dimensions
-    dates = np.unique(indices[:, 1])
+    # extract numpy array and labels from multiindex
+    if isinstance(indices, pd.MultiIndex):
+        indices = indices.to_frame().values
     ids = np.unique(indices[:, 0])
+    dates = np.unique(indices[:, 1])
+    indices[:,0] = np.unique(indices[:,0], return_inverse=True)[1]
+    indices[:,1] = np.unique(indices[:,1], return_inverse=True)[1]
+
+    # init data dimensions
     T = np.size(dates, axis=0)
     N = np.size(ids, axis=0)
     L = np.size(X, axis=1)
@@ -1110,7 +1119,7 @@ def _unpack_input(X, y, indices):
     return X, y, indices, dates, ids, T, N, L
 
 
-def _build_portfolio(X, y, indices):
+def _build_portfolio(X, y, indices, T, N, L):
     """ Converts a stacked panel of data where each row corresponds to an
     observation (i, t) into a tensor of dimensions (N, L, T) where N is the
     number of unique entities, L is the number of characteristics and T is
@@ -1137,6 +1146,15 @@ def _build_portfolio(X, y, indices):
         n_samples, the number of unique dates is T, and the number of
         characteristics used as instruments is L.
 
+    T : scalar
+        number of time periods
+
+    N : scalar
+        number of ids
+
+    L : scalar
+        total number of characteristics
+
     Returns
     -------
     Q: array-like
@@ -1151,12 +1169,6 @@ def _build_portfolio(X, y, indices):
         observations at each point in time
     """
 
-    dates = np.unique(indices[:,1])
-    ids = np.unique(indices[:,0])
-    T = np.size(dates, axis=0)
-    N = np.size(ids, axis=0)
-    L = np.size(X, axis=1) - 2
-
     print('The panel dimensions are:')
     print('n_samples:', N, ', L:', L, ', T:', T)
 
@@ -1167,16 +1179,16 @@ def _build_portfolio(X, y, indices):
     Q = np.full((L, T), np.nan)
     W = np.full((L, L, T), np.nan)
     val_obs = np.full((T), np.nan)
-    for t_i, t in enumerate(dates):
+    for t in range(T):
         ixt = (indices[:, 1] == t)
-        val_obs[t_i] = np.sum(ixt)
+        val_obs[t] = np.sum(ixt)
         # Define characteristics weighted matrices
         print(ixt)
         print(val_obs)
-        print(t_i)
-        Q[:, t_i] = X[ixt, :].T.dot(y[ixt])/val_obs[t_i]
-        W[:, :, t_i] = X[ixt, :].T.dot(X[ixt, :])/val_obs[t_i]
-        bar.update(t_i)
+        print(t)
+        Q[:, t] = X[ixt, :].T.dot(y[ixt])/val_obs[t]
+        W[:, :, t] = X[ixt, :].T.dot(X[ixt, :])/val_obs[t]
+        bar.update(t)
     bar.finish()
 
     # return portfolio data
@@ -1280,7 +1292,7 @@ def _Gamma_fit_panel(F_New, X, y, indices, PSF, L, Ktilde, alpha, l1_ratio,
             F = PSF
         else:
             F = np.vstack((F_New, PSF))
-    F = F[:,np.unique(indices[:,1], return_inverse=True)[1]]
+    F = F[:,indices[:,1]]
 
     # interact factors and characteristics
     ZkF = np.hstack((F[k,:,None] * X for k in range(Ktilde)))
@@ -1293,7 +1305,6 @@ def _Gamma_fit_panel(F_New, X, y, indices, PSF, L, Ktilde, alpha, l1_ratio,
 
     # OLS fit
     else:
-        print(ZkF, y)
         gamma = _numba_lstsq(ZkF, y)[0]
 
     gamma = gamma.reshape((Ktilde, L)).T

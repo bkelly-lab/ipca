@@ -26,13 +26,12 @@ ID = dict(zip(np.unique(data.firm).tolist(), np.arange(1, N+1)+5))
 data.firm = data.firm.apply(lambda x: ID[x])
 # Ensure that ordering of the data is correct
 data = data[['firm', 'year', 'invest', 'value', 'capital']]
-# Convert to numpy
-data = data.to_numpy()
-PSF = np.random.randn(len(np.unique(data[:, 1])), 2)
+PSF = np.random.randn(len(np.unique(data.loc[:, 'year'])), 2)
 PSF = PSF.reshape((2, -1))
-
-data_x = np.delete(data, 2, axis=1)
-data_y = data[:,2]
+data = data.set_index(['firm', 'year'])
+data_y = data['invest']
+data_x = data.drop('invest', axis=1)
+print(data_y.shape, data_x.shape)
 
 t0 = datetime.now()
 
@@ -46,6 +45,23 @@ print("R2pred_x", regr.score(X=data_x, y=data_y, mean_factor=True,
                              data_type="portfolio"))
 print(regr.Gamma)
 print(regr.Factors)
+
+# test indices
+regr = InstrumentedPCA(n_factors=1, intercept=False)
+regr = regr.fit(X=data_x.values, y=data_y.values, indices=data_x.index.values)
+print("R2total", regr.score(X=data_x.values, y=data_y.values,
+                            indices=data_x.index))
+print("R2pred", regr.score(X=data_x.values, y=data_y.values,
+                           indices=data_x.index, mean_factor=True))
+print("R2total_x", regr.score(X=data_x.values, y=data_y.values,
+                              indices=data_x.index,
+                              data_type="portfolio"))
+print("R2pred_x", regr.score(X=data_x.values, y=data_y.values,
+                             indices=data_x.index,
+                             mean_factor=True, data_type="portfolio"))
+print(regr.Gamma)
+print(regr.Factors)
+
 
 
 # Test InstrumentedPCA with intercept

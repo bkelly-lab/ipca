@@ -27,14 +27,10 @@ N = len(np.unique(data.firm))
 ID = dict(zip(np.unique(data.firm).tolist(),np.arange(1,N+1)))
 data.firm = data.firm.apply(lambda x: ID[x])
 
-# Ensure that ordering of the data is correct
-data = data[['firm','year','invest','value','capital']]
+# use multi-index for panel groups
+data = data.set_index(['firm', 'year'])
 y = data['invest']
 X = data.drop('invest', axis=1)
-
-# Convert to numpy
-y = y.to_numpy()
-X = X.to_numpy()
 
 # Call ipca
 from ipca import IPCARegressor
