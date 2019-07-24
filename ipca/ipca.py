@@ -1399,15 +1399,15 @@ def _fit_cv(model, X, y, indices, PSF, n_splits, split_method, alpha,
 
     full_tind = np.unique(indices[:,1])
 
-    for train, test in split.split(X, groups=indices[:,0]):
+    for train, test in split.split(indices, groups=indices[:,0]):
 
         # build partitioned model
         train_X = X[train,:]
-        train_indices = indices[train,:]
         train_y = y[train]
+        train_indices = indices[train,:]
         test_X = X[test,:]
-        test_indices = indices[test,:]
         test_y = y[test]
+        test_indices = indices[test,:]
         if PSF is None:
             train_PSF = None
         else:
