@@ -36,7 +36,7 @@ X = data.drop('invest', axis=1)
 from ipca import IPCARegressor
 regr = IPCARegressor(n_factors=1, intercept=False)
 regr = regr.fit(X=X, y=y)
-Gamma, Factors = regr.Gamma, regr.Factors
+Gamma, Factors = regr.get_factors(label_ind=True)
 ```
 
 ## Installing

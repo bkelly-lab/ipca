@@ -76,7 +76,7 @@ class InstrumentedPCA(BaseEstimator):
                 setattr(self, k, v)
 
 
-    def fit(self, X=None, y=None, indices=None, PSF=None, Gamma=None,
+    def fit(self, X, y, indices=None, PSF=None, Gamma=None,
             Factors=None, data_type="portfolio", label_ind=False, **kwargs):
         """
         Fits the regressor to the data using an alternating least squares
@@ -89,16 +89,16 @@ class InstrumentedPCA(BaseEstimator):
             entity-time pair in indices.  The number of characteristics
             (columns here) used as instruments is L.
 
-            If given as a DataFrame, we assume that it contains a mutliindex
+            If given as a DataFrame, we assume that it contains a MutliIndex
             mapping to each entity-time pair
 
         y : numpy array or pandas Series
             dependent variable where indices correspond to those in X
 
-            If given as a Series, we assume that it contains a mutliindex
+            If given as a Series, we assume that it contains a MutliIndex
             mapping to each entity-time pair
 
-        indices : numpy array
+        indices : numpy array, optional
             array containing the panel indices.  Should consist of two
             columns:
 
@@ -112,7 +112,7 @@ class InstrumentedPCA(BaseEstimator):
         PSF : numpy array, optional
             Set of pre-specified factors as matrix of dimension (M, T)
 
-        Gamma : numpy array or None
+        Gamma : numpy array, optional
             If provided, starting values for Gamma (see Notes)
 
         Factors : numpy array
@@ -163,7 +163,6 @@ class InstrumentedPCA(BaseEstimator):
             array is of dimension ((n_factors - M), T),
             corresponding to the n_factors - M many factors estimated on
             top of the pre-specified ones.
-
         """
 
         # handle input
@@ -265,7 +264,7 @@ class InstrumentedPCA(BaseEstimator):
         return Gamma, Factors
 
 
-    def fit_path(self, X=None, y=None, indices=None, PSF=None, alpha_l=None,
+    def fit_path(self, X, y, indices=None, PSF=None, alpha_l=None,
                  n_splits=10, split_method=GroupKFold, n_jobs=1,
                  backend="loky", **kwargs):
         """Fit a path of elastic net fits for various regularizing constants
@@ -284,7 +283,7 @@ class InstrumentedPCA(BaseEstimator):
 
             If given as a Series, we assume that it contains a mutliindex
             mapping to each entity-time pair
-        indices : numpy array
+        indices : numpy array, optional
             array containing the panel indices.  Should consist of two
             columns:
 
@@ -296,7 +295,7 @@ class InstrumentedPCA(BaseEstimator):
             characteristics used as instruments is L.
         PSF : numpy array, optional
             Set of pre-specified factors as matrix of dimension (M, T)
-        alpha_l : iterable or None
+        alpha_l : iterable, optional
             list of regularizing constants to use for path
         n_splits : scalar
             number of CV partitions
@@ -357,7 +356,7 @@ class InstrumentedPCA(BaseEstimator):
 
         Parameters
         ----------
-        X :  numpy array or pandas DataFrame or None
+        X :  numpy array or pandas DataFrame, optional
             matrix of characteristics where each row corresponds to a
             entity-time pair in indices.  The number of characteristics
             (columns here) used as instruments is L.
@@ -367,7 +366,7 @@ class InstrumentedPCA(BaseEstimator):
 
             If None we use the values associated with the current model
 
-        indices : numpy array or None
+        indices : numpy array, optional
             array containing the panel indices.  Should consist of two
             columns:
 
@@ -380,8 +379,10 @@ class InstrumentedPCA(BaseEstimator):
 
             If None we use the values associated with the current model
 
-        W : numpy array
+        W : numpy array, optional
             portfolio weight matrix of dimension (L, L, T)
+
+            If None, we use the values associated with the current model
 
         mean_factor: boolean
             If true, the estimated factors are averaged in the time-series
@@ -406,6 +407,22 @@ class InstrumentedPCA(BaseEstimator):
         label_ind : bool
             whether to apply the indices to fitted values and return
             pandas Series
+
+        Returns
+        -------
+        numpy array or pandas DataFrame/Series
+            The exact value returned depends on two things:
+
+            1. The data_type
+                a. If panel data_type is specified, this will be a series of
+                values for the panel ys
+
+                b. If portfolio data_type is specified, this will a matrix
+                of predicted char formed portfolio Qs
+            2. label_ind
+                If label_ind is True, we return pandas variants of the
+                predicted values.  If not, we return the underlying
+                numpy arrays.
         """
 
         if data_type == "panel":
@@ -557,7 +574,68 @@ class InstrumentedPCA(BaseEstimator):
 
     def score(self, X, y=None, indices=None, mean_factor=False,
               data_type="panel"):
-        """generate R^2"""
+        """generate R^2
+
+        Parameters
+        ----------
+        X :  numpy array or pandas DataFrame
+            matrix of characteristics where each row corresponds to a
+            entity-time pair in indices.  The number of characteristics
+            (columns here) used as instruments is L.
+
+            If given as a DataFrame, we assume that it contains a mutliindex
+            mapping to each entity-time pair
+
+            If None we use the values associated with the current model
+
+        y : numpy array or pandas Series, optional
+            dependent variable where indices correspond to those in X
+
+            If given as a Series, we assume that it contains a mutliindex
+            mapping to each entity-time pair
+
+        indices : numpy array, optional
+            array containing the panel indices.  Should consist of two
+            columns:
+
+            - Column 1: entity id (i)
+            - Column 2: time index (t)
+
+            The panel may be unbalanced. The number of unique entities is
+            n_samples, the number of unique dates is T, and the number of
+            characteristics used as instruments is L.
+
+            If None we use the values associated with the current model
+
+        mean_factor: boolean
+            If true, the estimated factors are averaged in the time-series
+            before prediction.
+
+        data_type : str
+            label for data-type used for prediction, one of the following:
+
+            1. panel
+
+            Uses the untransformed X and y for the estimation.
+
+            2. portfolio
+
+            Uses a matrix of characteristic weighted portfolios (Q)
+            as well as a matrix of weights (W) and count of non-missing
+            observations for each time period (val_obs) for the estimation.
+
+            See _build_portfolio for details on how these variables are formed
+            from the initial X and y.
+
+        label_ind : bool
+            whether to apply the indices to fitted values and return
+            pandas Series
+
+        Returns
+        -------
+        r2 : scalar
+            summary of model performance
+        """
 
         if data_type == "panel":
 
@@ -781,15 +859,15 @@ class InstrumentedPCA(BaseEstimator):
         Parameters
         ----------
 
-        X :  numpy array
+        X :  numpy array, optional
             matrix of characteristics where each row corresponds to a
             entity-time pair in indices.  The number of characteristics
             (columns here) used as instruments is L.
 
-        y : numpy array
+        y : numpy array, optional
             dependent variable where indices correspond to those in X
 
-        indices : numpy array
+        indices : numpy array, optional
             array containing the panel indices.  Should consist of two
             columns:
 
@@ -800,23 +878,23 @@ class InstrumentedPCA(BaseEstimator):
             n_samples, the number of unique dates is T, and the number of
             characteristics used as instruments is L.
 
-        PSF : None or array-like of shape (M, T), i.e.
+        PSF : array-like of shape (M, T), optional
             pre-specified factors
 
-        Q : None or array-like of shape (L,T),
-            i.e. characteristics weighted portfolios
+        Q : array-like of shape (L,T), optional
+            characteristics weighted portfolios
 
-        W : None or array_like of shape (L, L,T),
+        W : array_like of shape (L, L,T), optional
+            portfolio weights
 
-
-        val_obs: None or array-like
+        val_obs: array-like, optional
             matrix of dimension (T), containting the number of non missing
             observations at each point in time
 
-        Gamma : numpy array or None
+        Gamma : numpy array, optional
             If provided, starting values for Gamma
 
-        Factors : numpy array
+        Factors : numpy array, optional
             If provided, starting values for Factors
 
         data_type : str
@@ -1081,13 +1159,13 @@ def _prep_input(X, y=None, indices=None):
         If given as a DataFrame, we assume that it contains a mutliindex
         mapping to each entity-time pair
 
-    y : numpy array or pandas Series or None
+    y : numpy array or pandas Series, optional
         dependent variable where indices correspond to those in X
 
         If given as a Series, we assume that it contains a mutliindex
         mapping to each entity-time pair
 
-    indices : numpy array or pandas MultiIndex or None
+    indices : numpy array or pandas MultiIndex, optional
         array containing the panel indices.  Should consist of two
         columns:
 
@@ -1105,7 +1183,7 @@ def _prep_input(X, y=None, indices=None):
         entity-time pair in indices.  The number of characteristics
         (columns here) used as instruments is L.
 
-    y : numpy array or None
+    y : numpy array
         dependent variable where indices correspond to those in X
 
     indices : numpy array
@@ -1210,7 +1288,7 @@ def _build_portfolio(X, y, indices, metad):
         entity-time pair in indices.  The number of characteristics
         (columns here) used as instruments is L.
 
-    y : numpy array or None
+    y : numpy array, optional
         dependent variable where indices correspond to those in X
 
         If None, we just build the portfolio info for ind vars
@@ -1231,20 +1309,16 @@ def _build_portfolio(X, y, indices, metad):
 
     Returns
     -------
-    Q: array-like or None
+    Q: array-like, optional
         matrix of dimensions (L, T), containing the characteristics
         weighted portfolios
 
-    W: array-like or None
+    W: array-like, optional
         matrix of dimension (L, L, T)
 
     val_obs: array-like
         matrix of dimension (T), containting the number of non missing
         observations at each point in time
-
-    Notes
-    -----
-    TBA explain the potentially None X, y
     """
 
     N, L, T = metad["N"], metad["L"], metad["T"]
@@ -1443,7 +1517,7 @@ def _fit_cv(model, X, y, indices, PSF, n_splits, split_method, alpha,
 
     Notes
     -----
-    Groups are defined by firms
+    Groups are defined by 'ids'
     """
 
     # build iterator
