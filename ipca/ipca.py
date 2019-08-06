@@ -77,7 +77,7 @@ class InstrumentedPCA(BaseEstimator):
 
 
     def fit(self, X=None, y=None, indices=None, PSF=None, Gamma=None,
-            Factors=None, data_type="portfolio", **kwargs):
+            Factors=None, data_type="portfolio", label_ind=False, **kwargs):
         """
         Fits the regressor to the data using an alternating least squares
         scheme.
@@ -167,7 +167,8 @@ class InstrumentedPCA(BaseEstimator):
         """
 
         # handle input
-        X, y, indices, dates, ids, T, N, L = _unpack_input(X, y, indices)
+        X, y, indices, metad = _prep_input(X, y, indices)
+        N, L, T = metad["N"], metad["L"], metad["T"]
 
         # set data_type to panel if doing regularized estimation
         if self.alpha > 0.:
@@ -175,7 +176,7 @@ class InstrumentedPCA(BaseEstimator):
 
         # Handle pre-specified factors
         if PSF is not None:
-            if np.size(PSF, axis=1) != np.size(dates):
+            if np.size(PSF, axis=1) != np.size(metad["dates"]):
                 raise ValueError("""Number of PSF observations must match
                                  number of unique dates""")
             self.has_PSF = True
@@ -212,10 +213,10 @@ class InstrumentedPCA(BaseEstimator):
         self.PSFcase = True if self.has_PSF or self.intercept else False
 
         # store data
-        self.dates, self.ids, self.T, self.N, self.L = dates, ids, T, N, L
         self.X, self.y, self.indices, self.PSF = X, y, indices, PSF
-        Q, W, val_obs = _build_portfolio(X, y, indices, T, N, L)
+        Q, W, val_obs = _build_portfolio(X, y, indices, metad)
         self.Q, self.W, self.val_obs = Q, W, val_obs
+        self.metad = metad
 
         # Run IPCA
         Gamma, Factors = self._fit_ipca(X=X, y=y, indices=indices, Q=Q,
@@ -225,11 +226,12 @@ class InstrumentedPCA(BaseEstimator):
 
         # Store estimates
         if self.PSFcase:
+            date_ln = len(metad["dates"])
             if self.intercept and self.has_PSF:
-                PSF = np.concatenate((PSF, np.ones((1, len(dates)))),
+                PSF = np.concatenate((PSF, np.ones((1, date_ln))),
                                      axis=0)
             elif self.intercept:
-                PSF = np.ones((1, len(dates)))
+                PSF = np.ones((1, date_ln))
             if Factors is not None:
                 Factors = np.concatenate((Factors, PSF), axis=0)
             else:
@@ -238,6 +240,29 @@ class InstrumentedPCA(BaseEstimator):
         self.Gamma, self.Factors = Gamma, Factors
 
         return self
+
+
+    def get_factors(self, label_ind=False):
+        """returns a tuple containing Gamma and Factors
+
+        Parameters
+        ----------
+        label_ind : bool
+            if provided we return the factors as pandas DataFrames with
+            index info applied
+
+        Returns
+        -------
+        tuple
+            containing Gamma and Factors
+        """
+
+        Gamma, Factors = self.Gamma.copy(), self.Factors.copy()
+        if label_ind:
+            Gamma = pd.DataFrame(Gamma, index=self.metad["chars"])
+            Factors = pd.DataFrame(Factors, columns=self.metad["dates"])
+
+        return Gamma, Factors
 
 
     def fit_path(self, X=None, y=None, indices=None, PSF=None, alpha_l=None,
@@ -290,7 +315,7 @@ class InstrumentedPCA(BaseEstimator):
         """
 
         # handle input
-        X, y, indices, dates, ids, T, N, L = _unpack_input(X, y, indices)
+        X, y, indices, metad = _prep_input(X, y, indices)
 
         # handle data type, since we are doing regularized estimation
         # only the panel fit makes sense here
@@ -327,7 +352,7 @@ class InstrumentedPCA(BaseEstimator):
 
 
     def predict(self, X=None, indices=None, W=None, mean_factor=False,
-                data_type="panel"):
+                data_type="panel", label_ind=False):
         """wrapper around different data type predict methods
 
         Parameters
@@ -377,17 +402,26 @@ class InstrumentedPCA(BaseEstimator):
 
             See _build_portfolio for details on how these variables are formed
             from the initial X and y.
+
+        label_ind : bool
+            whether to apply the indices to fitted values and return
+            pandas Series
         """
 
         if data_type == "panel":
 
             if X is None:
-                X, indices, T, L = self.X, self.indices, self.T, self.L
+                X, indices, metad = self.X, self.indices, self.metad
             else:
-                X, y, indices, dates, ids, T, N, L = _unpack_input(X, None,
-                                                                   indices)
+                X, y, indices, metad = _prep_input(X, None, indices)
+            N, L, T = metad["N"], metad["L"], metad["T"]
 
-            return self.predict_panel(X, indices, T, mean_factor)
+            pred = self.predict_panel(X, indices, T, mean_factor)
+
+            if label_ind:
+                pred = pd.DataFrame(pred, columns=["yhat"])
+                ind = pd.DataFrame(indices, columns=["ids", "dates"])
+                pred = pd.concat([ind, pred]).set_index(["ids", "dates"])
 
         elif data_type == "portfolio":
 
@@ -395,22 +429,27 @@ class InstrumentedPCA(BaseEstimator):
                 L = W.shape[0]
                 T = W.shape[2]
             elif X is not None:
-                X, y, indices, dates, ids, T, N, L = _unpack_input(X, None,
-                                                                   indices)
-                Q, W, val_obs = _build_portfolio(X, None, indices, T, N, L)
+                X, y, indices, metad = _prep_input(X, None, indices)
+                Q, W, val_obs = _build_portfolio(X, None, indices, metad)
             elif hasattr(self, "W"):
                 W = self.W
                 L = W.shape[0]
                 T = W.shape[2]
             else:
-                X, indices = self.X, self.indices
-                T, N, L = self.T, self.N, self.L
-                Q, W, val_obs = _build_portfolio(X, None, indices, T, N, L)
+                X, indices, metad = self.X, self.indices, self.metad
+                N, L, T = metad["N"], metad["L"], metad["T"]
+                Q, W, val_obs = _build_portfolio(X, None, indices, metad)
 
-            return self.predict_portfolio(W, L, T, mean_factor)
+            pred = self.predict_portfolio(W, L, T, mean_factor)
+
+            if label_ind:
+                pred = pd.DataFrame(pred, index=metad["chars"],
+                                    columns=metad["dates"])
 
         else:
             raise ValueError("Unsupported data_type: %s" % data_type)
+
+        return pred
 
 
     def predict_panel(self, X, indices, T, mean_factor=False):
@@ -445,9 +484,8 @@ class InstrumentedPCA(BaseEstimator):
         Returns
         -------
         ypred : numpy array
-            The length of the returned array matches the
-            the length of data. A nan will be returned if there is missing
-            characteristics information.
+            The length of the returned array matches the length of data.
+            A nan will be returned if there is missing chars information.
         """
 
         mean_Factors = np.mean(self.Factors, axis=1).reshape((-1, 1))
@@ -523,7 +561,7 @@ class InstrumentedPCA(BaseEstimator):
 
         if data_type == "panel":
 
-            X, y, indices, dates, ids, T, N, L = _unpack_input(X, y, indices)
+            X, y, indices, metad = _prep_input(X, y, indices)
             if y is None:
                 y = self.y
 
@@ -535,10 +573,10 @@ class InstrumentedPCA(BaseEstimator):
 
         elif data_type == "portfolio":
 
-            X, y, indices, dates, ids, T, N, L = _unpack_input(X, y, indices)
+            X, y, indices, metad = _prep_input(X, y, indices)
             if y is None:
                 y = self.y
-            Q, W, val_obs = _build_portfolio(X, y, indices, T, N, L)
+            Q, W, val_obs = _build_portfolio(X, y, indices, metad)
 
             Qhat = self.predict(W=W, mean_factor=mean_factor,
                                 data_type="portfolio")
@@ -583,13 +621,15 @@ class InstrumentedPCA(BaseEstimator):
         if not hasattr(self, "Q"):
             raise ValueError("Bootstrap can only be run on fitted model.")
 
+        N, L, T = self.metad["N"], self.metad["L"], self.metad["T"]
+
         # Compute Walpha
         Walpha = self.Gamma[:, -1].T.dot(self.Gamma[:, -1])
 
         # Compute residuals
-        d = np.full((self.L, self.T), np.nan)
+        d = np.full((L, T), np.nan)
 
-        for t_i, t in enumerate(self.dates):
+        for t_i, t in enumerate(self.metad["dates"]):
             d[:, t_i] = self.Q[:, t_i]-self.W[:, :, t_i].dot(self.Gamma)\
                 .dot(self.Factors[:, t_i])
 
@@ -643,12 +683,14 @@ class InstrumentedPCA(BaseEstimator):
         if not hasattr(self, "Q"):
             raise ValueError("Bootstrap can only be run on fitted model.")
 
+        N, L, T = self.metad["N"], self.metad["L"], self.metad["T"]
+
         # Compute Wbeta_l if l-th characteristics is set to zero
         Wbeta_l = self.Gamma[l, :].dot(self.Gamma[l, :].T)
         Wbeta_l = np.trace(Wbeta_l)
         # Compute residuals
-        d = np.full((self.L, self.T), np.nan)
-        for t_i, t in enumerate(self.dates):
+        d = np.full((L, T), np.nan)
+        for t_i, t in enumerate(self.metad["dates"]):
             d[:, t_i] = self.Q[:, t_i]-self.W[:, :, t_i].dot(self.Gamma)\
                 .dot(self.Factors[:, t_i])
 
@@ -712,7 +754,8 @@ class InstrumentedPCA(BaseEstimator):
             characteristics information.
         """
 
-        X, y, indices, dates, ids, T, N, L = _unpack_input(X, y, indices)
+        X, y, indices, metad = _prep_input(X, y, indices)
+        N, L, T = metad["N"], metad["L"], metad["T"]
         ypred = np.full((N), np.nan)
 
         # Compute realized factor returns
@@ -863,7 +906,7 @@ class InstrumentedPCA(BaseEstimator):
         the updated Gamma's and factors as inputs.
         """
 
-        T = self.T
+        T = self.metad["T"]
 
         if PSF is None:
             L, K = np.shape(Gamma_Old)
@@ -949,8 +992,7 @@ class InstrumentedPCA(BaseEstimator):
         the updated Gamma's and factors as inputs.
         """
 
-        T = self.T
-        dates = self.dates
+        T, dates = self.metad["T"], self.metad["dates"]
 
         if PSF is None:
             L, K = np.shape(Gamma_Old)
@@ -1026,7 +1068,7 @@ class InstrumentedPCA(BaseEstimator):
         return Gamma_New, F_New
 
 
-def _unpack_input(X, y=None, indices=None):
+def _prep_input(X, y=None, indices=None):
     """handle mapping from different inputs type to consistent internal data
 
     Parameters
@@ -1063,7 +1105,7 @@ def _unpack_input(X, y=None, indices=None):
         entity-time pair in indices.  The number of characteristics
         (columns here) used as instruments is L.
 
-    y : numpy array
+    y : numpy array or None
         dependent variable where indices correspond to those in X
 
     indices : numpy array
@@ -1077,20 +1119,21 @@ def _unpack_input(X, y=None, indices=None):
         n_samples, the number of unique dates is T, and the number of
         characteristics used as instruments is L.
 
-    dates : array-like
-        unique dates in panel
+    metad : dict
+        contains metadata on inputs:
 
-    ids : array-like
-        unique ids in panel
-
-    T : scalar
-        number of time periods
-
-    N : scalar
-        number of ids
-
-    L : scalar
-        total number of characteristics
+        dates : array-like
+            unique dates in panel
+        ids : array-like
+            unique ids in panel
+        chars : array-like
+            labels for X chars/columns
+        T : scalar
+            number of time periods
+        N : scalar
+            number of ids
+        L : scalar
+            total number of characteristics
     """
 
     # Check panel input
@@ -1106,12 +1149,15 @@ def _unpack_input(X, y=None, indices=None):
     # if data-frames passed, break out indices from data
     if isinstance(X, pd.DataFrame) and not isinstance(y, pd.Series):
         indices = X.index
+        chars = X.columns
         X = X.values
     elif not isinstance(X, pd.DataFrame) and isinstance(y, pd.Series):
         indices = y.index
         y = y.values
+        chars = np.arange(X.shape[1])
     elif isinstance(X, pd.DataFrame) and isinstance(y, pd.Series):
         Xind = X.index
+        chars = X.columns
         yind = y.index
         X = X.values
         y = y.values
@@ -1119,6 +1165,8 @@ def _unpack_input(X, y=None, indices=None):
             raise ValueError("If indices are provided with both X and y\
                               they be the same")
         indices = Xind
+    else:
+        chars = np.arange(X.shape[1])
 
     if indices is None:
         raise ValueError("entity-time indices must be provided either\
@@ -1135,12 +1183,21 @@ def _unpack_input(X, y=None, indices=None):
     # init data dimensions
     T = np.size(dates, axis=0)
     N = np.size(ids, axis=0)
-    L = np.size(X, axis=1)
+    L = np.size(chars, axis=0)
 
-    return X, y, indices, dates, ids, T, N, L
+    # prep metadata
+    metad = {}
+    metad["dates"] = dates
+    metad["ids"] = ids
+    metad["chars"] = chars
+    metad["T"] = T
+    metad["N"] = N
+    metad["L"] = L
+
+    return X, y, indices, metad
 
 
-def _build_portfolio(X, y, indices, T, N, L):
+def _build_portfolio(X, y, indices, metad):
     """ Converts a stacked panel of data where each row corresponds to an
     observation (i, t) into a tensor of dimensions (N, L, T) where N is the
     number of unique entities, L is the number of characteristics and T is
@@ -1169,14 +1226,8 @@ def _build_portfolio(X, y, indices, T, N, L):
         n_samples, the number of unique dates is T, and the number of
         characteristics used as instruments is L.
 
-    T : scalar
-        number of time periods
-
-    N : scalar
-        number of ids
-
-    L : scalar
-        total number of characteristics
+    metad : dict
+        dictionary containing metadata
 
     Returns
     -------
@@ -1193,8 +1244,10 @@ def _build_portfolio(X, y, indices, T, N, L):
 
     Notes
     -----
-    TBA expalin the potentially None X, y
+    TBA explain the potentially None X, y
     """
+
+    N, L, T = metad["N"], metad["L"], metad["T"]
 
     print('The panel dimensions are:')
     print('n_samples:', N, ', L:', L, ', T:', T)
@@ -1432,16 +1485,17 @@ def _fit_cv(model, X, y, indices, PSF, n_splits, split_method, alpha,
 
 
 def _BS_Walpha_sub(model, n, d):
-    Q_b = np.full((model.L, model.T), np.nan)
+    L, T = model.metad["L"], model.metad["T"]
+    Q_b = np.full((L, T), np.nan)
     np.random.seed(n)
 
     # Re-estimate unrestricted model
     Gamma = None
     while Gamma is None:
         try:
-            for t in range(model.T):
+            for t in range(T):
                 d_temp = np.random.standard_t(5)
-                d_temp *= d[:,np.random.randint(0,high=model.T)]
+                d_temp *= d[:,np.random.randint(0,high=T)]
                 Q_b[:, t] = model.W[:, :, t].dot(model.Gamma[:, :-1])\
                     .dot(model.Factors[:-1, t]) + d_temp
             Gamma, Factors = model._fit_ipca(Q=Q_b, W=model.W,
@@ -1461,7 +1515,8 @@ def _BS_Walpha_sub(model, n, d):
 
 
 def _BS_Wbeta_sub(model, n, d, l):
-    Q_b = np.full((model.L, model.T), np.nan)
+    L, T = model.metad["L"], model.metad["T"]
+    Q_b = np.full((L, T), np.nan)
     np.random.seed(n)
     #Modify Gamma_beta such that its l-th row is zero
     Gamma_beta_l = np.copy(model.Gamma)
@@ -1470,9 +1525,9 @@ def _BS_Wbeta_sub(model, n, d, l):
     Gamma = None
     while Gamma is None:
         try:
-            for t in range(model.T):
+            for t in range(T):
                 d_temp = np.random.standard_t(5)
-                d_temp *= d[:,np.random.randint(0,high=model.T)]
+                d_temp *= d[:,np.random.randint(0,high=T)]
                 Q_b[:, t] = model.W[:, :, t].dot(Gamma_beta_l)\
                     .dot(model.Factors[:, t]) + d_temp
             Gamma, Factors = model._fit_ipca(Q=Q_b, W=model.W,

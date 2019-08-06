@@ -63,8 +63,9 @@ print("R2pred_x", regr.score(X=data_x.values, y=data_y.values,
                              mean_factor=True, data_type="portfolio"))
 print(regr.Gamma)
 print(regr.Factors)
-
-
+Gamma_df, Factors_df = regr.get_factors(label_ind=True)
+print(Gamma_df)
+print(Factors_df)
 
 # Test InstrumentedPCA with intercept
 regr = InstrumentedPCA(n_factors=1, intercept=True)
