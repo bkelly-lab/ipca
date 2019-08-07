@@ -3,6 +3,7 @@ from sklearn.model_selection import GroupKFold
 from sklearn.linear_model import ElasticNet
 from sklearn.metrics import r2_score
 from joblib import Parallel, delayed
+from numpy.linalg import LinAlgError
 from numba import jit
 import pandas as pd
 import numpy as np
@@ -1257,6 +1258,7 @@ def _prep_input(X, y=None, indices=None):
     dates = np.unique(indices[:, 1])
     indices[:,0] = np.unique(indices[:,0], return_inverse=True)[1]
     indices[:,1] = np.unique(indices[:,1], return_inverse=True)[1]
+    indices = indices.astype(int)
 
     # init data dimensions
     T = np.size(dates, axis=0)
@@ -1275,7 +1277,7 @@ def _prep_input(X, y=None, indices=None):
     return X, y, indices, metad
 
 
-def _build_portfolio(X, y, indices, metad):
+def _build_portfolio(X, y, indices, metad, verbose=False):
     """ Converts a stacked panel of data where each row corresponds to an
     observation (i, t) into a tensor of dimensions (N, L, T) where N is the
     number of unique entities, L is the number of characteristics and T is
@@ -1307,6 +1309,9 @@ def _build_portfolio(X, y, indices, metad):
     metad : dict
         dictionary containing metadata
 
+    verbose : bool
+        flag for whether to include status info for build state
+
     Returns
     -------
     Q: array-like, optional
@@ -1323,13 +1328,13 @@ def _build_portfolio(X, y, indices, metad):
 
     N, L, T = metad["N"], metad["L"], metad["T"]
 
-    print('The panel dimensions are:')
-    print('n_samples:', N, ', L:', L, ', T:', T)
-
-    bar = progressbar.ProgressBar(maxval=T,
-                                  widgets=[progressbar.Bar('=', '[', ']'),
-                                           ' ', progressbar.Percentage()])
-    bar.start()
+    if verbose:
+        print('The panel dimensions are:')
+        print('n_samples:', N, ', L:', L, ', T:', T)
+        bar = progressbar.ProgressBar(maxval=T,
+                                      widgets=[progressbar.Bar('=', '[', ']'),
+                                               ' ', progressbar.Percentage()])
+        bar.start()
 
     # init portfolio outputs based on input type
     if y is not None:
@@ -1344,7 +1349,8 @@ def _build_portfolio(X, y, indices, metad):
             ixt = (indices[:, 1] == t)
             val_obs[t] = np.sum(ixt)
             W[:, :, t] = X[ixt, :].T.dot(X[ixt, :])/val_obs[t]
-            bar.update(t)
+            if verbose:
+                bar.update(t)
 
     else:
         for t in range(T):
@@ -1352,9 +1358,11 @@ def _build_portfolio(X, y, indices, metad):
             val_obs[t] = np.sum(ixt)
             Q[:, t] = X[ixt, :].T.dot(y[ixt])/val_obs[t]
             W[:, :, t] = X[ixt, :].T.dot(X[ixt, :])/val_obs[t]
-            bar.update(t)
+            if verbose:
+                bar.update(t)
 
-    bar.finish()
+    if verbose:
+        bar.finish()
 
     # return portfolio data
     return Q, W, val_obs
@@ -1546,14 +1554,19 @@ def _fit_cv(model, X, y, indices, PSF, n_splits, split_method, alpha,
         params = model.get_params()
         params["alpha"] = alpha
         train_IPCA = InstrumentedPCA(**params)
-        train_IPCA = train_IPCA.fit(train_X, train_y, train_indices,
-                                    train_PSF, **kwargs)
+        try:
+            train_IPCA = train_IPCA.fit(train_X, train_y, train_indices,
+                                        train_PSF, **kwargs)
 
-        # get MSE
-        test_pred = train_IPCA.predict(test_X, test_indices, mean_factor=True)
-        mse = np.sum(np.square(test_y - test_pred))
-        mse /= test_pred.shape[0]
-        mse_l.append(mse)
+            # get MSE
+            test_pred = train_IPCA.predict(test_X, test_indices, mean_factor=True)
+            mse = np.sum(np.square(test_y - test_pred))
+            mse /= test_pred.shape[0]
+            mse_l.append(mse)
+
+        # in cases where the resulting coefs aren't linearly independent fail
+        except LinAlgError:
+            mse_l.append(np.inf)
 
     return np.array(mse_l)
 
