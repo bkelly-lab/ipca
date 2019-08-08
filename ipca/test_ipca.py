@@ -143,9 +143,9 @@ regr = regr.fit(X=data_x, y=data_y)
 
 # Test regularization path
 regr = InstrumentedPCA(n_factors=2)
-cvmse = regr.fit_path(X=data_x, y=data_y)
-cvmse = regr.fit_path(X=data_x, y=data_y, alpha_l=np.array([0., 0.5, 1.]))
-cvmse = regr.fit_path(X=data_x, y=data_y, PSF=PSF2)
-cvmse = regr.fit_path(X=data_x, y=data_y, PSF=PSF2,
+cvmse = regr.fit_cv(X=data_x, y=data_y)
+cvmse = regr.fit_cv(X=data_x, y=data_y, alpha_l=np.array([0., 0.5, 1.]))
+cvmse = regr.fit_cv(X=data_x, y=data_y, PSF=PSF2)
+cvmse = regr.fit_cv(X=data_x, y=data_y, PSF=PSF2,
                       alpha_l=np.array([0., 0.5, 1.]))
 print(datetime.now() - t0)

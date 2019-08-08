@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 import scipy as sp
 import progressbar
+import itertools
 import warnings
 import time
 
@@ -339,7 +340,6 @@ class InstrumentedPCA(BaseEstimator):
 
         # prep splits
         split = split_method(n_splits=n_splits)
-        full_tind = np.unique(indices[:,1])
         split_iter = split.split(indices, groups=indices[:,0])
 
         if n_jobs > 1:
@@ -356,12 +356,11 @@ class InstrumentedPCA(BaseEstimator):
                                      **kwargs)
                      for train_ind, test_ind in split_iter]
 
-        # TODO update handling of cvmse merge
-        cvmse = np.stack(cvmse)
+        cvmse = itertools.zip_longest(*cvmse, fillvalue=np.nan)
+        cvmse = np.array(list(cvmse))
         cvmse = np.hstack((alpha_l[:,None], cvmse))
 
         return cvmse
-
 
 
     def predict(self, X=None, indices=None, W=None, mean_factor=False,
@@ -950,7 +949,7 @@ class InstrumentedPCA(BaseEstimator):
             Gamma_Old = Gamma_Old[:, :self.n_factors_eff]
             s = s[:self.n_factors_eff]
             v = v[:self.n_factors_eff, :]
-            Factor_Old = np.diag(s).dot(v)
+            Factors_Old = np.diag(s).dot(v)
         if Gamma is not None:
             Gamma_Old = Gamma
         if Factors is not None:
@@ -963,18 +962,18 @@ class InstrumentedPCA(BaseEstimator):
 
         while((iter <= self.max_iter) and (tol_current > self.iter_tol)):
 
-            Gamma_New, Factor_New = ALS_fit(Gamma_Old, *ALS_inputs,
+            Gamma_New, Factors_New = ALS_fit(Gamma_Old, *ALS_inputs,
                                             PSF=PSF, **kwargs)
 
             if self.PSFcase:
                 tol_current = np.max(np.abs(Gamma_New - Gamma_Old))
             else:
                 tol_current_G = np.max(np.abs(Gamma_New - Gamma_Old))
-                tol_current_F = np.max(np.abs(Factor_New - Factor_Old))
+                tol_current_F = np.max(np.abs(Factors_New - Factors_Old))
                 tol_current = max(tol_current_G, tol_current_F)
 
             # Update factors and loadings
-            Factor_Old, Gamma_Old = Factor_New, Gamma_New
+            Factors_Old, Gamma_Old = Factors_New, Gamma_New
 
             iter += 1
             if not quiet:
@@ -983,7 +982,7 @@ class InstrumentedPCA(BaseEstimator):
         if not quiet:
             print('-- Convergence Reached --')
 
-        return Gamma_New, Factor_New
+        return Gamma_New, Factors_New
 
 
     def _ALS_fit_portfolio(self, Gamma_Old, Q, W, val_obs, PSF=None, **kwargs):
@@ -1419,8 +1418,8 @@ def _fit_alpha_path(model, X, y, indices, PSF, train_ind, test_ind,
 
     Returns
     -------
-    pandas DataFrame
-        containing regularizing constants and MSE for each model
+    mse_l : list
+        list of estimated MSEs for each alpha which produced ind Gammas
 
     Notes
     -----
@@ -1428,6 +1427,7 @@ def _fit_alpha_path(model, X, y, indices, PSF, train_ind, test_ind,
     """
 
     # build partitioned model
+    full_tind = np.unique(indices[:,1])
     train_X = X[train_ind,:]
     train_y = y[train_ind]
     train_indices = indices[train_ind,:]
@@ -1452,13 +1452,14 @@ def _fit_alpha_path(model, X, y, indices, PSF, train_ind, test_ind,
         IPCA = InstrumentedPCA(**params)
 
         try:
-            IPCA = IPCA.fit(train_X, train_y, indices, PSF,
-                            Gamma=Gamma, Factors=Factors, **kwargs)
+            IPCA = IPCA.fit(train_X, train_y, train_indices,
+                            train_PSF, Gamma=Gamma, Factors=Factors,
+                            **kwargs)
             Gamma, Factors = IPCA.get_factors()
 
             # generate MSE
-            test_pred = train_IPCA.predict(test_X, test_indices,
-                                           mean_factor=mean_factor)
+            test_pred = IPCA.predict(test_X, test_indices,
+                                     mean_factor=mean_factor)
             mse = np.sum(np.square(test_y - test_pred))
             mse /= test_pred.shape[0]
             mse_l.append(mse)
@@ -1471,11 +1472,7 @@ def _fit_alpha_path(model, X, y, indices, PSF, train_ind, test_ind,
         except LinAlgError:
             break
 
-    alpha_l = alpha_l[:len(mse_l)]
-
-    res = pd.DataFrame({"alpha": alpha_l, "mse": mse_l})
-
-    return res
+    return mse_l
 
 
 def _Ft_fit_portfolio(Gamma_Old, W_t, Q_t):
