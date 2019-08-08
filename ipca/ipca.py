@@ -267,8 +267,8 @@ class InstrumentedPCA(BaseEstimator):
 
 
     def fit_cv(self, X, y, indices=None, PSF=None, alpha_l=None,
-               n_splits=10, split_method=GroupKFold, mean_factor=True,
-               n_jobs=1, backend="loky", **kwargs):
+               hot_start=True, n_splits=10, split_method=GroupKFold,
+               mean_factor=True, n_jobs=1, backend="loky", **kwargs):
         """Fit a series of cross-validated regularized IPCA models
 
         Parameters
@@ -299,6 +299,10 @@ class InstrumentedPCA(BaseEstimator):
             Set of pre-specified factors as matrix of dimension (M, T)
         alpha_l : iterable, optional
             list of regularizing constants to use for path
+        hot_start : boolean
+            whether to use the estimated values from the previous alpha
+            iteration in the current alpha step (for each training/test
+            sub-partition)
         n_splits : scalar
             number of CV partitions
         nnan_splits : scalar
@@ -318,7 +322,12 @@ class InstrumentedPCA(BaseEstimator):
         -------
         cvmse : numpy matrix
             array of dim (P x (C + 1)) where P is the number of reg
-            constants and C is the number of CV partitions
+            constants and C is the number of CV partitions.
+
+            cvmse will likely contain nan values.  These correspond
+            to train/test partitions where the corresponding alpha
+            selects a set of Gamma coefficients with linearly
+            dependent columns (too many elements have been regularized)
         """
 
         # handle input
@@ -346,16 +355,17 @@ class InstrumentedPCA(BaseEstimator):
             cvmse = Parallel(n_jobs=n_jobs, backend=backend)(
                         delayed(_fit_alpha_path)(
                             self, X, y, indices, PSF, train_ind, test_ind,
-                            alpha_l, mean_factor=mean_factor, **kwargs)
+                            alpha_l, hot_start=hot_start,
+                            mean_factor=mean_factor, **kwargs)
                         for train_ind, test_ind in split_iter)
 
         else:
             cvmse = [_fit_alpha_path(self, X, y, indices, PSF, train_ind,
-                                     test_ind, alpha_l,
-                                     mean_factor=mean_factor,
-                                     **kwargs)
+                                     test_ind, alpha_l, hot_start=hot_start,
+                                     mean_factor=mean_factor, **kwargs)
                      for train_ind, test_ind in split_iter]
 
+        # aggregate CV errors
         cvmse = itertools.zip_longest(*cvmse, fillvalue=np.nan)
         cvmse = np.array(list(cvmse))
         cvmse = np.hstack((alpha_l[:,None], cvmse))
@@ -1381,7 +1391,7 @@ def _build_portfolio(X, y, indices, metad, verbose=False):
 
 
 def _fit_alpha_path(model, X, y, indices, PSF, train_ind, test_ind,
-                    alpha_l, mean_factor=True, **kwargs):
+                    alpha_l, hot_start=True, mean_factor=True, **kwargs):
     """fits a path of regularized IPCA models over a train/test data pair
 
     Parameters
@@ -1412,6 +1422,10 @@ def _fit_alpha_path(model, X, y, indices, PSF, train_ind, test_ind,
         testing sample numpy array index returned by split method
     alpha_l : numpy array
         list of alpha values to test
+    hot_start : boolean
+        whether to use the estimated values from the previous alpha
+        iteration in the current alpha step (for each training/test
+        sub-partition)
     mean_factor
         If true, the estimated factors are averaged in the time-series
         before prediction.
