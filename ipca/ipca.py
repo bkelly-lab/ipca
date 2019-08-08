@@ -265,10 +265,10 @@ class InstrumentedPCA(BaseEstimator):
         return Gamma, Factors
 
 
-    def fit_path(self, X, y, indices=None, PSF=None, alpha_l=None,
-                 n_splits=10, split_method=GroupKFold, n_jobs=1,
-                 backend="loky", **kwargs):
-        """Fit a path of elastic net fits for various regularizing constants
+    def fit_cv(self, X, y, indices=None, PSF=None, alpha_l=None,
+               n_splits=10, split_method=GroupKFold, mean_factor=True,
+               n_jobs=1, backend="loky", **kwargs):
+        """Fit a series of cross-validated regularized IPCA models
 
         Parameters
         ----------
@@ -300,8 +300,14 @@ class InstrumentedPCA(BaseEstimator):
             list of regularizing constants to use for path
         n_splits : scalar
             number of CV partitions
+        nnan_splits : scalar
+            number of CV partitions which must not have all zero Gamma
+            coefs to use in CV estimation
         split_method : sklearn cross-validation generator factory
             method to generate CV partitions
+        mean_factor : boolean
+            If true, the estimated factors are averaged in the time-series
+            before prediction.
         n_jobs : scalar
             number of jobs for parallel CV estimation
         backend : str
@@ -324,31 +330,38 @@ class InstrumentedPCA(BaseEstimator):
         else:
             data_type = "panel"
         if data_type == "portfolio":
-            raise ValueError("Unsupported data_type for fit_path: \
+            raise ValueError("Unsupported data_type for fit_cv: \
                               'portfolio'. Regularized estimation is only \
                               implemented for 'panel' data_type currently")
-
-        # init alphas
+        # prep alpha_l
         if alpha_l is None:
             alpha_l = np.linspace(0.0, 1., 100)
 
-        # run cross-validation
+        # prep splits
+        split = split_method(n_splits=n_splits)
+        full_tind = np.unique(indices[:,1])
+        split_iter = split.split(indices, groups=indices[:,0])
+
         if n_jobs > 1:
             cvmse = Parallel(n_jobs=n_jobs, backend=backend)(
-                        delayed(_fit_cv)(
-                        self, X, y, indices, PSF, n_splits, split_method,
-                        alpha, data_type=data_type, **kwargs)
-                        for alpha in alpha_l)
-        else:
-            cvmse = [_fit_cv(self, X, y, indices, PSF, n_splits,
-                             split_method, alpha, data_type=data_type,
-                             **kwargs)
-                     for alpha in alpha_l]
+                        delayed(_fit_alpha_path)(
+                            self, X, y, indices, PSF, train_ind, test_ind,
+                            alpha_l, mean_factor=mean_factor, **kwargs)
+                        for train_ind, test_ind in split_iter)
 
+        else:
+            cvmse = [_fit_alpha_path(self, X, y, indices, PSF, train_ind,
+                                     test_ind, alpha_l,
+                                     mean_factor=mean_factor,
+                                     **kwargs)
+                     for train_ind, test_ind in split_iter]
+
+        # TODO update handling of cvmse merge
         cvmse = np.stack(cvmse)
         cvmse = np.hstack((alpha_l[:,None], cvmse))
 
         return cvmse
+
 
 
     def predict(self, X=None, indices=None, W=None, mean_factor=False,
@@ -1368,6 +1381,103 @@ def _build_portfolio(X, y, indices, metad, verbose=False):
     return Q, W, val_obs
 
 
+def _fit_alpha_path(model, X, y, indices, PSF, train_ind, test_ind,
+                    alpha_l, mean_factor=True, **kwargs):
+    """fits a path of regularized IPCA models over a train/test data pair
+
+    Parameters
+    ----------
+    model : IPCA model instance
+        contains the params
+    X :  numpy array
+        matrix of characteristics where each row corresponds to a
+        entity-time pair in indices.  The number of characteristics
+        (columns here) used as instruments is L.
+    y : numpy array
+        dependent variable where indices correspond to those in X
+    indices : numpy array
+        array containing the panel indices.  Should consist of two
+        columns:
+
+        - Column 1: entity id (i)
+        - Column 2: time index (t)
+
+        The panel may be unbalanced. The number of unique entities is
+        n_samples, the number of unique dates is T, and the number of
+        characteristics used as instruments is L.
+    PSF : numpy array, optional
+        Set of pre-specified factors as matrix of dimension (M, T)
+    train_ind : numpy array
+        training sample numpy array index returned by split method
+    test_ind : numpy array
+        testing sample numpy array index returned by split method
+    alpha_l : numpy array
+        list of alpha values to test
+    mean_factor
+        If true, the estimated factors are averaged in the time-series
+        before prediction.
+
+    Returns
+    -------
+    pandas DataFrame
+        containing regularizing constants and MSE for each model
+
+    Notes
+    -----
+    Groups are defined by 'ids'
+    """
+
+    # build partitioned model
+    train_X = X[train_ind,:]
+    train_y = y[train_ind]
+    train_indices = indices[train_ind,:]
+    test_X = X[test_ind,:]
+    test_y = y[test_ind]
+    test_indices = indices[test_ind,:]
+    if PSF is None:
+        train_PSF = None
+    else:
+        train_tind = np.unique(train_indices[:,1])
+        train_tind = np.where(np.isin(full_tind, train_tind))[0]
+        train_PSF = PSF[:,train_tind]
+
+    # prep starting estimates
+    Gamma, Factors = None, None
+    mse_l = []
+
+    for alpha in alpha_l:
+
+        params = model.get_params()
+        params["alpha"] = alpha
+        IPCA = InstrumentedPCA(**params)
+
+        try:
+            IPCA = IPCA.fit(train_X, train_y, indices, PSF,
+                            Gamma=Gamma, Factors=Factors, **kwargs)
+            Gamma, Factors = IPCA.get_factors()
+
+            # generate MSE
+            test_pred = train_IPCA.predict(test_X, test_indices,
+                                           mean_factor=mean_factor)
+            mse = np.sum(np.square(test_y - test_pred))
+            mse /= test_pred.shape[0]
+            mse_l.append(mse)
+
+        # this catches cases where the resulting Gamma is too
+        # sparse so the columns aren't independent
+        #
+        # In this case we want to break out and return the
+        # current possible models
+        except LinAlgError:
+            break
+
+    alpha_l = alpha_l[:len(mse_l)]
+
+    res = pd.DataFrame({"alpha": alpha_l, "mse": mse_l})
+
+    return res
+
+
 def _Ft_fit_portfolio(Gamma_Old, W_t, Q_t):
     """helper func to parallelize F ALS fit"""
 
@@ -1483,92 +1593,6 @@ def _Gamma_fit_panel(F_New, X, y, indices, PSF, L, Ktilde, alpha, l1_ratio,
     gamma = gamma.reshape((Ktilde, L)).T
 
     return gamma
-
-
-def _fit_cv(model, X, y, indices, PSF, n_splits, split_method, alpha,
-            **kwargs):
-    """inner function for fit_path doing CV
-
-    Parameters
-    ----------
-    model : IPCA model instance
-        contains the params
-    X :  numpy array
-        matrix of characteristics where each row corresponds to a
-        entity-time pair in indices.  The number of characteristics
-        (columns here) used as instruments is L.
-    y : numpy array
-        dependent variable where indices correspond to those in X
-    indices : numpy array
-        array containing the panel indices.  Should consist of two
-        columns:
-
-        - Column 1: entity id (i)
-        - Column 2: time index (t)
-
-        The panel may be unbalanced. The number of unique entities is
-        n_samples, the number of unique dates is T, and the number of
-        characteristics used as instruments is L.
-    PSF : numpy array, optional
-        Set of pre-specified factors as matrix of dimension (M, T)
-    n_splits : scalar
-        number of CV partitions
-    split_method : sklearn cross-validation generator factory
-        method to generate CV partitions
-    alpha : scalar
-        regularizing constant for current step in elastic-net path
-
-    Returns
-    -------
-    mse : array
-        array of MSEs for each CV partition
-
-    Notes
-    -----
-    Groups are defined by 'ids'
-    """
-
-    # build iterator
-    mse_l = []
-    split = split_method(n_splits=n_splits)
-
-    full_tind = np.unique(indices[:,1])
-
-    for train, test in split.split(indices, groups=indices[:,0]):
-
-        # build partitioned model
-        train_X = X[train,:]
-        train_y = y[train]
-        train_indices = indices[train,:]
-        test_X = X[test,:]
-        test_y = y[test]
-        test_indices = indices[test,:]
-        if PSF is None:
-            train_PSF = None
-        else:
-            train_tind = np.unique(train_indices[:,1])
-            train_tind = np.where(np.isin(full_tind, train_tind))[0]
-            train_PSF = PSF[:,train_tind]
-
-        # init new training model
-        params = model.get_params()
-        params["alpha"] = alpha
-        train_IPCA = InstrumentedPCA(**params)
-        try:
-            train_IPCA = train_IPCA.fit(train_X, train_y, train_indices,
-                                        train_PSF, **kwargs)
-
-            # get MSE
-            test_pred = train_IPCA.predict(test_X, test_indices, mean_factor=True)
-            mse = np.sum(np.square(test_y - test_pred))
-            mse /= test_pred.shape[0]
-            mse_l.append(mse)
-
-        # in cases where the resulting coefs aren't linearly independent fail
-        except LinAlgError:
-            mse_l.append(np.inf)
-
-    return np.array(mse_l)
 
 
 def _BS_Walpha_sub(model, n, d):
