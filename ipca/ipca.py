@@ -3,7 +3,6 @@ from sklearn.model_selection import GroupKFold
 from sklearn.linear_model import ElasticNet
 from sklearn.metrics import r2_score
 from joblib import Parallel, delayed
-from numpy.linalg import LinAlgError
 from numba import jit
 import pandas as pd
 import numpy as np
@@ -1483,7 +1482,7 @@ def _fit_alpha_path(model, X, y, indices, PSF, train_ind, test_ind,
         #
         # In this case we want to break out and return the
         # current possible models
-        except LinAlgError:
+        except np.linalg.LinAlgError:
             break
 
     return mse_l
