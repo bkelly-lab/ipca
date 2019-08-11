@@ -304,9 +304,6 @@ class InstrumentedPCA(BaseEstimator):
             sub-partition)
         n_splits : scalar
             number of CV partitions
-        nnan_splits : scalar
-            number of CV partitions which must not have all zero Gamma
-            coefs to use in CV estimation
         split_method : sklearn cross-validation generator factory
             method to generate CV partitions
         mean_factor : boolean
@@ -1588,7 +1585,7 @@ def _Gamma_fit_panel(F_New, X, y, indices, PSF, L, Ktilde, alpha, l1_ratio,
     F = F[:,indices[:,1]]
 
     # interact factors and characteristics
-    ZkF = np.hstack([F[k,:,None] * X for k in range(Ktilde)])
+    F = np.hstack([F[k,:,None] * X for k in range(Ktilde)])
 
     # elastic net fit
     if alpha:
