@@ -1590,7 +1590,7 @@ def _Gamma_fit_panel(F_New, X, y, indices, PSF, L, Ktilde, alpha, l1_ratio,
     # elastic net fit
     if alpha:
         mod = ElasticNet(alpha=alpha, l1_ratio=l1_ratio, **kwargs)
-        mod.fit(ZkF, y)
+        mod.fit(F, y)
         gamma = mod.coef_
 
     # OLS fit
