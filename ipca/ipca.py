@@ -1595,7 +1595,7 @@ def _Gamma_fit_panel(F_New, X, y, indices, PSF, L, Ktilde, alpha, l1_ratio,
 
     # OLS fit
     else:
-        gamma = _numba_lstsq(ZkF, y)[0]
+        gamma = _numba_lstsq(F, y)[0]
 
     gamma = gamma.reshape((Ktilde, L)).T
 
