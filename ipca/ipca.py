@@ -171,8 +171,9 @@ class InstrumentedPCA(BaseEstimator):
         N, L, T = metad["N"], metad["L"], metad["T"]
 
         # set data_type to panel if doing regularized estimation
-        if self.alpha > 0.:
-            data_type = "panel"
+        if self.alpha > 0. and data_type != "panel":
+            raise ValueError("""Cannot run regularized estimation (alpha > 0)
+                              with non-panel data_type""")
 
         # Handle pre-specified factors
         if PSF is not None:
