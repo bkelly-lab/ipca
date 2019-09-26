@@ -133,13 +133,13 @@ print('p-value', pval)
 
 # Test with regularization
 regr = InstrumentedPCA(n_factors=2, alpha=0.5, intercept=False)
-regr = regr.fit(X=data_x, y=data_y)
+regr = regr.fit(X=data_x, y=data_y, data_type="panel")
 regr = InstrumentedPCA(n_factors=2, alpha=0.5, l1_ratio=0.5, intercept=False)
-regr = regr.fit(X=data_x, y=data_y)
+regr = regr.fit(X=data_x, y=data_y, data_type="panel")
 regr = InstrumentedPCA(n_factors=2, alpha=0.5, intercept=False)
-regr = regr.fit(X=data_x, y=data_y, PSF=PSF1)
+regr = regr.fit(X=data_x, y=data_y, PSF=PSF1, data_type="panel")
 regr = InstrumentedPCA(n_factors=1, intercept=True)
-regr = regr.fit(X=data_x, y=data_y)
+regr = regr.fit(X=data_x, y=data_y, data_type="panel")
 
 # Test regularization path
 regr = InstrumentedPCA(n_factors=2)

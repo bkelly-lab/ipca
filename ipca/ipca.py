@@ -340,6 +340,8 @@ class InstrumentedPCA(BaseEstimator):
             raise ValueError("Unsupported data_type for fit_cv: \
                               'portfolio'. Regularized estimation is only \
                               implemented for 'panel' data_type currently")
+        kwargs["data_type"] = data_type
+
         # prep alpha_l
         if alpha_l is None:
             alpha_l = np.linspace(0.0, 1., 100)
@@ -581,7 +583,97 @@ class InstrumentedPCA(BaseEstimator):
         for t in range(T):
 
             if mean_factor:
-                qpred = W[:,X, y, indices, metad = _prep_input(X, y, indices)
+                qpred = W[:, :, t].dot(self.Gamma).dot(mean_Factors)
+                qpred = np.squeeze(qpred)
+                Qpred[:,t] = qpred
+            else:
+                qpred = W[:, :, t].dot(self.Gamma)\
+                    .dot(self.Factors[:, t])
+                Qpred[:,t] = qpred
+
+        return Qpred
+
+
+    def score(self, X, y=None, indices=None, mean_factor=False,
+              data_type="panel"):
+        """generate R^2
+
+        Parameters
+        ----------
+        X :  numpy array or pandas DataFrame
+            matrix of characteristics where each row corresponds to a
+            entity-time pair in indices.  The number of characteristics
+            (columns here) used as instruments is L.
+
+            If given as a DataFrame, we assume that it contains a mutliindex
+            mapping to each entity-time pair
+
+            If None we use the values associated with the current model
+
+        y : numpy array or pandas Series, optional
+            dependent variable where indices correspond to those in X
+
+            If given as a Series, we assume that it contains a mutliindex
+            mapping to each entity-time pair
+
+        indices : numpy array, optional
+            array containing the panel indices.  Should consist of two
+            columns:
+
+            - Column 1: entity id (i)
+            - Column 2: time index (t)
+
+            The panel may be unbalanced. The number of unique entities is
+            n_samples, the number of unique dates is T, and the number of
+            characteristics used as instruments is L.
+
+            If None we use the values associated with the current model
+
+        mean_factor: boolean
+            If true, the estimated factors are averaged in the time-series
+            before prediction.
+
+        data_type : str
+            label for data-type used for prediction, one of the following:
+
+            1. panel
+
+            Uses the untransformed X and y for the estimation.
+
+            2. portfolio
+
+            Uses a matrix of characteristic weighted portfolios (Q)
+            as well as a matrix of weights (W) and count of non-missing
+            observations for each time period (val_obs) for the estimation.
+
+            See _build_portfolio for details on how these variables are formed
+            from the initial X and y.
+
+        label_ind : bool
+            whether to apply the indices to fitted values and return
+            pandas Series
+
+        Returns
+        -------
+        r2 : scalar
+            summary of model performance
+        """
+
+        if data_type == "panel":
+
+            X, y, indices, metad = _prep_input(X, y, indices)
+            if y is None:
+                y = self.y
+
+            yhat = self.predict(X=X, indices=indices,
+                                mean_factor=mean_factor,
+                                data_type="panel")
+
+            return r2_score(y, yhat)
+
+        elif data_type == "portfolio":
+
+            X, y, indices, metad = _prep_input(X, y, indices)
             if y is None:
                 y = self.y
             Q, W, val_obs = _build_portfolio(X, y, indices, metad)
@@ -597,6 +689,8 @@ class InstrumentedPCA(BaseEstimator):
 
         else:
             return ValueError("Unsupported data_type: %s" % data_type)
+
+
 
 
     def BS_Walpha(self, ndraws=1000, n_jobs=1, backend='loky'):
