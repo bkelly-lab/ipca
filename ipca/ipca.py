@@ -317,11 +317,12 @@ class InstrumentedPCA(BaseEstimator):
 
         Returns
         -------
-        cvmse : numpy matrix
-            array of dim (P x (C + 1)) where P is the number of reg
-            constants and C is the number of CV partitions.
+        cvsse : pandas DataFrame
+            Indices correspond to alpha values and columns correspond
+            to partition SSE and test sample N, additionally a column
+            with the aggregate MSE is included.
 
-            cvmse will likely contain nan values.  These correspond
+            cvsse will likely contain nan values.  These correspond
             to train/test partitions where the corresponding alpha
             selects a set of Gamma coefficients with linearly
             dependent columns (too many elements have been regularized)
@@ -351,7 +352,7 @@ class InstrumentedPCA(BaseEstimator):
         split_iter = split.split(indices, groups=indices[:,0])
 
         if n_jobs > 1:
-            cvmse = Parallel(n_jobs=n_jobs, backend=backend)(
+            cvsse = Parallel(n_jobs=n_jobs, backend=backend)(
                         delayed(_fit_alpha_path)(
                             self, X, y, indices, PSF, train_ind, test_ind,
                             alpha_l, hot_start=hot_start,
@@ -359,17 +360,21 @@ class InstrumentedPCA(BaseEstimator):
                         for train_ind, test_ind in split_iter)
 
         else:
-            cvmse = [_fit_alpha_path(self, X, y, indices, PSF, train_ind,
+            cvsse = [_fit_alpha_path(self, X, y, indices, PSF, train_ind,
                                      test_ind, alpha_l, hot_start=hot_start,
                                      mean_factor=mean_factor, **kwargs)
                      for train_ind, test_ind in split_iter]
 
         # aggregate CV errors
-        cvmse = itertools.zip_longest(*cvmse, fillvalue=np.nan)
-        cvmse = np.array(list(cvmse))
-        cvmse = np.hstack((alpha_l[:,None], cvmse))
+        cvsse = [df.rename(columns={"sse": "sse_%d" % i,
+                                    "N": "N_%d" % i})
+                 for i, df in enumerate(cvsse)]
+        cvsse = pd.concat(cvsse, axis=1)
+        sse = cvsse[[c for c in cvsse.columns if "sse" in c]].sum(axis=1)
+        sn = cvsse[[c for c in cvsse.columns if "N" in c]].sum(axis=1)
+        cvsse["MSE"] = sse / sn
 
-        return cvmse
+        return cvsse
 
 
     def predict(self, X=None, indices=None, W=None, mean_factor=False,
@@ -689,8 +694,6 @@ class InstrumentedPCA(BaseEstimator):
 
         else:
             return ValueError("Unsupported data_type: %s" % data_type)
-
-
 
 
     def BS_Walpha(self, ndraws=1000, n_jobs=1, backend='loky'):
@@ -1463,7 +1466,8 @@ def _fit_alpha_path(model, X, y, indices, PSF, train_ind, test_ind,
 
     # prep starting estimates
     Gamma, Factors = None, None
-    mse_l = []
+    sse_l = []
+    sn_l = []
 
     for alpha in alpha_l:
 
@@ -1480,9 +1484,10 @@ def _fit_alpha_path(model, X, y, indices, PSF, train_ind, test_ind,
             # generate MSE
             test_pred = IPCA.predict(test_X, test_indices,
                                      mean_factor=mean_factor)
-            mse = np.sum(np.square(test_y - test_pred))
-            mse /= test_pred.shape[0]
-            mse_l.append(mse)
+            sse = np.sum(np.square(test_y - test_pred))
+            sn = test_pred.shape[0]
+            sse_l.append(sse)
+            sn_l.append(sn)
 
         # this catches cases where the resulting Gamma is too
         # sparse so the columns aren't independent
@@ -1492,7 +1497,11 @@ def _fit_alpha_path(model, X, y, indices, PSF, train_ind, test_ind,
         except np.linalg.LinAlgError:
             break
 
-    return mse_l
+    res = pd.DataFrame({"alpha": alpha_l[:len(sse_l)],
+                        "sse": sse_l,
+                        "N": sn_l})
+    res = res.set_index("alpha")
+    return res
 
 
 def _Ft_fit_portfolio(Gamma_Old, W_t, Q_t):
