@@ -33,6 +33,10 @@ class InstrumentedPCA(BaseEstimator):
         Maximum number of alternating least squares updates before the
         estimation is stopped
 
+    min_iter : int, default=0
+        Minimum number of alternating least squares updates before the
+        estimation is stopped
+
     iter_tol : float, default=10e-6
         Tolerance threshold for stopping the alternating least squares
         procedure
@@ -53,8 +57,8 @@ class InstrumentedPCA(BaseEstimator):
     """
 
     def __init__(self, n_factors=1, intercept=False, max_iter=10000,
-                 iter_tol=10e-6, alpha=0., l1_ratio=1., n_jobs=1,
-                 backend="loky"):
+                 min_iter=0, iter_tol=10e-6, alpha=0., l1_ratio=1.,
+                 n_jobs=1, backend="loky"):
 
         # paranoid parameter checking to make it easier for users to know when
         # they have gone awry and to make it safe to assume some variables can
@@ -351,6 +355,8 @@ class InstrumentedPCA(BaseEstimator):
         split = split_method(n_splits=n_splits)
         split_iter = split.split(indices, groups=indices[:,0])
 
+        # TODO add standardization for each sub-sample
+
         if n_jobs > 1:
             cvsse = Parallel(n_jobs=n_jobs, backend=backend)(
                         delayed(_fit_alpha_path)(
@@ -367,12 +373,15 @@ class InstrumentedPCA(BaseEstimator):
 
         # aggregate CV errors
         cvsse = [df.rename(columns={"sse": "sse_%d" % i,
-                                    "N": "N_%d" % i})
+                                    "N": "N_%d" % i,
+                                    "nz": "nz_%d" % i})
                  for i, df in enumerate(cvsse)]
         cvsse = pd.concat(cvsse, axis=1)
         sse = cvsse[[c for c in cvsse.columns if "sse" in c]].sum(axis=1)
         sn = cvsse[[c for c in cvsse.columns if "N" in c]].sum(axis=1)
+        nzs = cvsse[[c for c in cvsse.columns if "nz" in c]]
         cvsse["MSE"] = sse / sn
+        cvsse["nz_mn"] = nzs.sum(axis=1) / nzs.shape[1]
 
         return cvsse
 
@@ -884,7 +893,8 @@ class InstrumentedPCA(BaseEstimator):
 
     def _fit_ipca(self, X=None, y=None, indices=None, PSF=None, Q=None,
                   W=None, val_obs=None, Gamma=None, Factors=None, quiet=False,
-                  data_type="portfolio", **kwargs):
+                  data_type="portfolio", cnvg_measure="max_tol",
+                  raise_cnvg=False, log_trace=False, **kwargs):
         """
         Fits the regressor to the data using alternating least squares
 
@@ -935,6 +945,19 @@ class InstrumentedPCA(BaseEstimator):
             1. panel
             2. portfolio
 
+        cnvg_measure : str
+            label for measure used to identify convergence
+
+            TBA
+
+        raise_cnvg : optional, bool
+            If true, raise an error when we don't converge within specified
+            iters
+
+        log_trace : bool
+            whether to return a DataFrame containing information on the
+            current runs convergence properties
+
         quiet   : optional, bool
             If true no text output will be produced
 
@@ -952,6 +975,8 @@ class InstrumentedPCA(BaseEstimator):
             n_factors - M many factors estimated on top of the pre-
             specified ones.
         """
+
+        # TODO add cnvg_measure docs
 
         if data_type == "panel":
             ALS_inputs = (X, y, indices)
@@ -979,27 +1004,83 @@ class InstrumentedPCA(BaseEstimator):
 
         iter = 0
 
-        while((iter <= self.max_iter) and (tol_current > self.iter_tol)):
+        trace_l = []
+        while(((iter <= self.max_iter) and
+              (tol_current > self.iter_tol)) or
+              (iter <= self.min_iter)):
 
             Gamma_New, Factors_New = ALS_fit(Gamma_Old, *ALS_inputs,
                                             PSF=PSF, **kwargs)
 
-            if self.PSFcase:
-                tol_current = np.max(np.abs(Gamma_New - Gamma_Old))
+            # TODO add max_diff_norm, fix max_tol label
+            # TODO much of this cnvg methodology could be removed
+
+            if cnvg_measure == "max_tol":
+                if self.PSFcase:
+                    tol_current = np.max(np.abs(Gamma_New - Gamma_Old))
+                else:
+                    tol_current_G = np.max(np.abs(Gamma_New - Gamma_Old))
+                    tol_current_F = np.max(np.abs(Factors_New - Factors_Old))
+                    tol_current = max(tol_current_G, tol_current_F)
+            elif cnvg_measure == "gamma_diff_norm":
+                tol_current = np.linalg.norm(Gamma_New - Gamma_Old)
+                tol_current /= np.linalg.norm(Gamma_Old)
+            elif cnvg_measure == "factors_diff_norm":
+                tol_current = np.linalg.norm(Factors_New - Factors_Old)
+                tol_current /= np.linalg.norm(Factors_Old)
+            elif cnvg_measure == "gamma_norm_diff":
+                Gamma_norm_n = np.linalg.norm(Gamma_New)
+                Gamma_norm_o = np.linalg.norm(Gamma_Old)
+                tol_current = (Gamma_norm_n - Gamma_norm_o) / Gamma_norm_o
+            elif cnvg_measure == "factors_norm_diff":
+                Factors_norm_n = np.linalg.norm(Factors_New)
+                Factors_norm_o = np.linalg.norm(Factors_Old)
+                tol_current = (Factors_norm_n - Factors_norm_o) / Factors_norm_o
+            elif cnvg_measure == "max_norm_diff":
+                Gamma_norm_n = np.linalg.norm(Gamma_New)
+                Gamma_norm_o = np.linalg.norm(Gamma_Old)
+                tol_Gamma = np.abs(Gamma_norm_n - Gamma_norm_o)
+                Factors_norm_n = np.linalg.norm(Factors_New)
+                Factors_norm_o = np.linalg.norm(Factors_Old)
+                tol_Factors = np.abs(Factors_norm_n - Factors_norm_o)
+                tol_current = max(tol_Gamma, tol_Factors)
             else:
-                tol_current_G = np.max(np.abs(Gamma_New - Gamma_Old))
-                tol_current_F = np.max(np.abs(Factors_New - Factors_Old))
-                tol_current = max(tol_current_G, tol_current_F)
+                raise ValueError("Unrecognized cnvg_measure: %s" %
+                                 cnvg_measure)
 
             # Update factors and loadings
             Factors_Old, Gamma_Old = Factors_New, Gamma_New
+            Gamma_nz = np.sum(Gamma_New != 0)
+            Factors_norm = np.linalg.norm(Factors_New)
+            Gamma_norm = np.linalg.norm(Gamma_New)
 
             iter += 1
             if not quiet:
-                print('Step', iter, '- Aggregate Update:', tol_current)
+                print("Step", iter,
+                      "- Aggregate Update:", tol_current,
+                      "- Gamma Norm:", Gamma_norm,
+                      "- Factors Norm:", Factors_norm,
+                      "- Non-Zero Gamma:", Gamma_nz,
+                      "- Cnvg Measure:", cnvg_measure)
+
+            if log_trace:
+                trace_l.append({"step": iter,
+                                "tol_current": tol_current,
+                                "Gamma_norm": Gamma_norm,
+                                "Factors_norm": Factors_norm,
+                                "Gamma_nz": Gamma_nz})
+
+        if raise_cnvg and iter >= self.max_iter:
+            raise ValueError("Estimation didn't converge in %d iterations" %
+                             self.max_iter)
+
 
         if not quiet:
             print('-- Convergence Reached --')
+
+        if log_trace:
+            trace = pd.DataFrame(trace_l)
+            self.trace = trace
 
         return Gamma_New, Factors_New
 
@@ -1104,6 +1185,10 @@ class InstrumentedPCA(BaseEstimator):
 
         T, dates = self.metad["T"], self.metad["dates"]
 
+        # we have to do this because otherwise the Old value is
+        # modified which messes up convergence results
+        Gamma_Old = Gamma_Old.copy()
+
         if PSF is None:
             L, K = np.shape(Gamma_Old)
             Ktilde = K
@@ -1155,8 +1240,9 @@ class InstrumentedPCA(BaseEstimator):
             F_New = None
 
         # ALS Step 2
-        Gamma_New = _Gamma_fit_panel(F_New, X, y, indices, PSF, L, Ktilde,
-                                     self.alpha, self.l1_ratio, **kwargs)
+        Gamma_New = _Gamma_fit_panel(F_New, Gamma_Old, X, y, indices, PSF, L,
+                                     Ktilde, self.alpha, self.l1_ratio,
+                                     **kwargs)
 
         # condition checks
 
@@ -1271,6 +1357,8 @@ def _prep_input(X, y=None, indices=None):
         yind = y.index
         X = X.values
         y = y.values
+#        print(Xind)
+#        print(yind)
         if not np.array_equal(Xind, yind):
             raise ValueError("If indices are provided with both X and y\
                               they be the same")
@@ -1464,10 +1552,13 @@ def _fit_alpha_path(model, X, y, indices, PSF, train_ind, test_ind,
         train_tind = np.where(np.isin(full_tind, train_tind))[0]
         train_PSF = PSF[:,train_tind]
 
+    # TODO handle internal standardization
+
     # prep starting estimates
     Gamma, Factors = None, None
     sse_l = []
     sn_l = []
+    nz_l = []
 
     for alpha in alpha_l:
 
@@ -1486,8 +1577,10 @@ def _fit_alpha_path(model, X, y, indices, PSF, train_ind, test_ind,
                                      mean_factor=mean_factor)
             sse = np.sum(np.square(test_y - test_pred))
             sn = test_pred.shape[0]
+            nz = np.sum(Gamma != 0)
             sse_l.append(sse)
             sn_l.append(sn)
+            nz_l.append(nz)
 
         # this catches cases where the resulting Gamma is too
         # sparse so the columns aren't independent
@@ -1499,7 +1592,8 @@ def _fit_alpha_path(model, X, y, indices, PSF, train_ind, test_ind,
 
     res = pd.DataFrame({"alpha": alpha_l[:len(sse_l)],
                         "sse": sse_l,
-                        "N": sn_l})
+                        "N": sn_l,
+                        "nz": nz_l})
     res = res.set_index("alpha")
     return res
 
@@ -1589,8 +1683,8 @@ def _Gamma_fit_portfolio(F_New, Q, W, val_obs, PSF, L, K, Ktilde, T):
     return Gamma_New
 
 
-def _Gamma_fit_panel(F_New, X, y, indices, PSF, L, Ktilde, alpha, l1_ratio,
-                     **kwargs):
+def _Gamma_fit_panel(F_New, Gamma_Old, X, y, indices, PSF, L, Ktilde,
+                     alpha, l1_ratio, **kwargs):
     """helper function for estimating vectorized Gamma with panel"""
 
     # join observed factors with latent factors and map to panel
@@ -1608,7 +1702,9 @@ def _Gamma_fit_panel(F_New, X, y, indices, PSF, L, Ktilde, alpha, l1_ratio,
 
     # elastic net fit
     if alpha:
-        mod = ElasticNet(alpha=alpha, l1_ratio=l1_ratio, **kwargs)
+        mod = ElasticNet(alpha=alpha, l1_ratio=l1_ratio,
+                         warm_start=True, **kwargs)
+        mod.coef_ = Gamma_Old.reshape(Ktilde * L)
         mod.fit(F, y)
         gamma = mod.coef_
 
