@@ -33,10 +33,6 @@ class InstrumentedPCA(BaseEstimator):
         Maximum number of alternating least squares updates before the
         estimation is stopped
 
-    min_iter : int, default=0
-        Minimum number of alternating least squares updates before the
-        estimation is stopped
-
     iter_tol : float, default=10e-6
         Tolerance threshold for stopping the alternating least squares
         procedure
@@ -57,8 +53,8 @@ class InstrumentedPCA(BaseEstimator):
     """
 
     def __init__(self, n_factors=1, intercept=False, max_iter=10000,
-                 min_iter=0, iter_tol=10e-6, alpha=0., l1_ratio=1.,
-                 n_jobs=1, backend="loky"):
+                 iter_tol=10e-6, alpha=0., l1_ratio=1., n_jobs=1,
+                 backend="loky"):
 
         # paranoid parameter checking to make it easier for users to know when
         # they have gone awry and to make it safe to assume some variables can
@@ -945,11 +941,6 @@ class InstrumentedPCA(BaseEstimator):
             1. panel
             2. portfolio
 
-        cnvg_measure : str
-            label for measure used to identify convergence
-
-            TBA
-
         raise_cnvg : optional, bool
             If true, raise an error when we don't converge within specified
             iters
@@ -1002,78 +993,40 @@ class InstrumentedPCA(BaseEstimator):
         # Estimation Step
         tol_current = 1
 
-        iter = 0
+        itr = 0
 
         trace_l = []
-        while(((iter <= self.max_iter) and
-              (tol_current > self.iter_tol)) or
-              (iter <= self.min_iter)):
+        while((itr <= self.max_iter) and
+              (tol_current > self.iter_tol)):
 
             Gamma_New, Factors_New = ALS_fit(Gamma_Old, *ALS_inputs,
                                             PSF=PSF, **kwargs)
 
-            # TODO add max_diff_norm, fix max_tol label
-            # TODO much of this cnvg methodology could be removed
-
-            if cnvg_measure == "max_tol":
-                if self.PSFcase:
-                    tol_current = np.max(np.abs(Gamma_New - Gamma_Old))
-                else:
-                    tol_current_G = np.max(np.abs(Gamma_New - Gamma_Old))
-                    tol_current_F = np.max(np.abs(Factors_New - Factors_Old))
-                    tol_current = max(tol_current_G, tol_current_F)
-            elif cnvg_measure == "gamma_diff_norm":
-                tol_current = np.linalg.norm(Gamma_New - Gamma_Old)
-                tol_current /= np.linalg.norm(Gamma_Old)
-            elif cnvg_measure == "factors_diff_norm":
-                tol_current = np.linalg.norm(Factors_New - Factors_Old)
-                tol_current /= np.linalg.norm(Factors_Old)
-            elif cnvg_measure == "gamma_norm_diff":
-                Gamma_norm_n = np.linalg.norm(Gamma_New)
-                Gamma_norm_o = np.linalg.norm(Gamma_Old)
-                tol_current = (Gamma_norm_n - Gamma_norm_o) / Gamma_norm_o
-            elif cnvg_measure == "factors_norm_diff":
-                Factors_norm_n = np.linalg.norm(Factors_New)
-                Factors_norm_o = np.linalg.norm(Factors_Old)
-                tol_current = (Factors_norm_n - Factors_norm_o) / Factors_norm_o
-            elif cnvg_measure == "max_norm_diff":
-                Gamma_norm_n = np.linalg.norm(Gamma_New)
-                Gamma_norm_o = np.linalg.norm(Gamma_Old)
-                tol_Gamma = np.abs(Gamma_norm_n - Gamma_norm_o)
-                Factors_norm_n = np.linalg.norm(Factors_New)
-                Factors_norm_o = np.linalg.norm(Factors_Old)
-                tol_Factors = np.abs(Factors_norm_n - Factors_norm_o)
-                tol_current = max(tol_Gamma, tol_Factors)
+            if self.PSFcase:
+                tol_current = np.max(np.abs(Gamma_New - Gamma_Old))
             else:
-                raise ValueError("Unrecognized cnvg_measure: %s" %
-                                 cnvg_measure)
+                tol_current_G = np.max(np.abs(Gamma_New - Gamma_Old))
+                tol_current_F = np.max(np.abs(Factors_New - Factors_Old))
+                tol_current = max(tol_current_G, tol_current_F)
 
             # Update factors and loadings
             Factors_Old, Gamma_Old = Factors_New, Gamma_New
-            Gamma_nz = np.sum(Gamma_New != 0)
-            Factors_norm = np.linalg.norm(Factors_New)
-            Gamma_norm = np.linalg.norm(Gamma_New)
 
-            iter += 1
+            itr += 1
             if not quiet:
-                print("Step", iter,
-                      "- Aggregate Update:", tol_current,
-                      "- Gamma Norm:", Gamma_norm,
-                      "- Factors Norm:", Factors_norm,
-                      "- Non-Zero Gamma:", Gamma_nz,
-                      "- Cnvg Measure:", cnvg_measure)
+                print("Step", itr,
+                      "- Aggregate Update:", tol_current)
 
             if log_trace:
-                trace_l.append({"step": iter,
+                trace_l.append({"step": itr,
                                 "tol_current": tol_current,
-                                "Gamma_norm": Gamma_norm,
-                                "Factors_norm": Factors_norm,
-                                "Gamma_nz": Gamma_nz})
+                                "Gamma_norm": np.linalg.norm(Gamma_New),
+                                "Factors_norm": np.linalg.norm(Factors_New),
+                                "Gamma_nz": np.sum(Gamma_New != 0)})
 
-        if raise_cnvg and iter >= self.max_iter:
+        if raise_cnvg and itr >= self.max_iter:
             raise ValueError("Estimation didn't converge in %d iterations" %
                              self.max_iter)
-
 
         if not quiet:
             print('-- Convergence Reached --')
