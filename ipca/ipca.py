@@ -33,6 +33,10 @@ class InstrumentedPCA(BaseEstimator):
         Maximum number of alternating least squares updates before the
         estimation is stopped
 
+    max_iter : int, default=0
+        Mininimum number of alternating least squares updates before the
+        estimation is stopped
+
     iter_tol : float, default=10e-6
         Tolerance threshold for stopping the alternating least squares
         procedure
@@ -53,8 +57,8 @@ class InstrumentedPCA(BaseEstimator):
     """
 
     def __init__(self, n_factors=1, intercept=False, max_iter=10000,
-                 iter_tol=10e-6, alpha=0., l1_ratio=1., n_jobs=1,
-                 backend="loky"):
+                 min_iter=0, iter_tol=10e-6, alpha=0., l1_ratio=1.,
+                 n_jobs=1, backend="loky"):
 
         # paranoid parameter checking to make it easier for users to know when
         # they have gone awry and to make it safe to assume some variables can
@@ -889,7 +893,7 @@ class InstrumentedPCA(BaseEstimator):
 
     def _fit_ipca(self, X=None, y=None, indices=None, PSF=None, Q=None,
                   W=None, val_obs=None, Gamma=None, Factors=None, quiet=False,
-                  data_type="portfolio", cnvg_measure="max_tol",
+                  data_type="portfolio", cnvg_method="max_abs_diff",
                   raise_cnvg=False, log_trace=False, **kwargs):
         """
         Fits the regressor to the data using alternating least squares
@@ -941,6 +945,9 @@ class InstrumentedPCA(BaseEstimator):
             1. panel
             2. portfolio
 
+        cnvg_method : str
+            label for method used to select convergence threshold
+
         raise_cnvg : optional, bool
             If true, raise an error when we don't converge within specified
             iters
@@ -982,8 +989,8 @@ class InstrumentedPCA(BaseEstimator):
         if Gamma is None or Factors is None:
             Gamma_Old, s, v = np.linalg.svd(Q)
             Gamma_Old = Gamma_Old[:, :self.n_factors_eff]
-            s = s[:self.n_factors_eff]
-            v = v[:self.n_factors_eff, :]
+            s = s[:self.n_factors]
+            v = v[:self.n_factors, :]
             Factors_Old = np.diag(s).dot(v)
         if Gamma is not None:
             Gamma_Old = Gamma
@@ -996,18 +1003,55 @@ class InstrumentedPCA(BaseEstimator):
         itr = 0
 
         trace_l = []
-        while((itr <= self.max_iter) and
-              (tol_current > self.iter_tol)):
+        while(((itr <= self.max_iter) and
+               (tol_current > self.iter_tol)) or
+               (itr < self.min_iter)):
 
             Gamma_New, Factors_New = ALS_fit(Gamma_Old, *ALS_inputs,
-                                            PSF=PSF, **kwargs)
+                                             PSF=PSF, **kwargs)
 
-            if self.PSFcase:
-                tol_current = np.max(np.abs(Gamma_New - Gamma_Old))
+            # select tolerance
+            if cnvg_method == "max_abs_diff":
+                if self.PSFcase:
+                    tol_current = np.max(np.abs(Gamma_New - Gamma_Old))
+                else:
+                    tol_current_G = np.max(np.abs(Gamma_New - Gamma_Old))
+                    tol_current_F = np.max(np.abs(Factors_New - Factors_Old))
+                    tol_current = max(tol_current_G, tol_current_F)
+            elif cnvg_method == "Gamma_diff_norm":
+                tol_current = np.linalg.norm(Gamma_New - Gamma_Old)
+                tol_current /= np.linalg.norm(Gamma_Old)
+            elif cnvg_method == "Factors_diff_norm":
+                tol_current = np.linalg.norm(Factors_New - Factors_Old)
+                tol_current /= np.linalg.norm(Factors_Old)
+            elif cnvg_method == "max_diff_norm":
+                tol_Gamma = np.linalg.norm(Gamma_New - Gamma_Old)
+                tol_Gamma /= np.linalg.norm(Gamma_Old)
+                tol_Factors = np.linalg.norm(Factors_New - Factors_Old)
+                tol_Factors /= np.linalg.norm(Factors_Old)
+                tol_current = max(tol_Gamma, tol_Factors)
+            elif cnvg_method == "Gamma_norm_diff":
+                Gamma_norm_o = np.linalg.norm(Gamma_Old)
+                Gamma_norm_n = np.linalg.norm(Gamma_New)
+                tol_current = np.abs(Gamma_norm_n - Gamma_norm_o)
+                tol_current /= Gamma_norm_o
+            elif cnvg_method == "Factors_norm_diff":
+                Factors_norm_o = np.linalg.norm(Factors_Old)
+                Factors_norm_n = np.linalg.norm(Factors_New)
+                tol_current = np.abs(Factors_norm_n - Factors_norm_o)
+                tol_current /= Factors_norm_o
+            elif cnvg_method == "max_norm_diff":
+                Gamma_norm_o = np.linalg.norm(Gamma_Old)
+                Gamma_norm_n = np.linalg.norm(Gamma_New)
+                tol_Gamma = np.abs(Gamma_norm_n - Gamma_norm_o)
+                tol_Gamma /= Gamma_norm_o
+                Factors_norm_o = np.linalg.norm(Factors_Old)
+                Factors_norm_n = np.linalg.norm(Factors_New)
+                tol_Factors = np.abs(Factors_norm_n - Factors_norm_o)
+                tol_Factors /= Factors_norm_o
+                tol_current = max(tol_Gamma, tol_Factors)
             else:
-                tol_current_G = np.max(np.abs(Gamma_New - Gamma_Old))
-                tol_current_F = np.max(np.abs(Factors_New - Factors_Old))
-                tol_current = max(tol_current_G, tol_current_F)
+                raise ValueError("Unknown cnvg_method: %s" % cnvg_method)
 
             # Update factors and loadings
             Factors_Old, Gamma_Old = Factors_New, Gamma_New
@@ -1015,7 +1059,9 @@ class InstrumentedPCA(BaseEstimator):
             itr += 1
             if not quiet:
                 print("Step", itr,
-                      "- Aggregate Update:", tol_current)
+                      "- Aggregate Update:", tol_current,
+                      "- Gamma_norm:", np.linalg.norm(Gamma_New),
+                      "- Factors_norm:", np.linalg.norm(Factors_New))
 
             if log_trace:
                 trace_l.append({"step": itr,
@@ -1189,6 +1235,9 @@ class InstrumentedPCA(BaseEstimator):
                                                        y[tind], PSF[:,t],
                                                        K, Ktilde)
 
+                # rescale F
+                F_New = (F_New.T / F_New.std(axis=1)).T
+
         else:
             F_New = None
 
@@ -1197,22 +1246,19 @@ class InstrumentedPCA(BaseEstimator):
                                      Ktilde, self.alpha, self.l1_ratio,
                                      **kwargs)
 
-        # condition checks
+#        if K > 0:
+#            R1 = _numba_chol(Gamma_New[:, :K].T.dot(Gamma_New[:, :K])).T
+#            R2, _, _ = _numba_svd(R1.dot(F_New).dot(F_New.T).dot(R1.T))
+#            Gamma_New[:, :K] = _numba_lstsq(Gamma_New[:, :K].T,
+#                                            R1.T)[0].dot(R2)
+#            F_New = _numba_solve(R2, R1.dot(F_New))
 
-        # Enforce Orthogonality of Gamma_Beta and factors F
-        if K > 0:
-            R1 = _numba_chol(Gamma_New[:, :K].T.dot(Gamma_New[:, :K])).T
-            R2, _, _ = _numba_svd(R1.dot(F_New).dot(F_New.T).dot(R1.T))
-            Gamma_New[:, :K] = _numba_lstsq(Gamma_New[:, :K].T,
-                                            R1.T)[0].dot(R2)
-            F_New = _numba_solve(R2, R1.dot(F_New))
-
-        # Enforce sign convention for Gamma_Beta and F_New
-        if K > 0:
-            sg = np.sign(np.mean(F_New, axis=1)).reshape((-1, 1))
-            sg[sg == 0] = 1
-            Gamma_New[:, :K] = np.multiply(Gamma_New[:, :K], sg.T)
-            F_New = np.multiply(F_New, sg)
+#        # Enforce sign convention for Gamma_Beta and F_New
+#        if K > 0:
+#            sg = np.sign(np.mean(F_New, axis=1)).reshape((-1, 1))
+#            sg[sg == 0] = 1
+#            Gamma_New[:, :K] = np.multiply(Gamma_New[:, :K], sg.T)
+#            F_New = np.multiply(F_New, sg)
 
         return Gamma_New, F_New
 
@@ -1652,6 +1698,7 @@ def _Gamma_fit_panel(F_New, Gamma_Old, X, y, indices, PSF, L, Ktilde,
 
     # interact factors and characteristics
     F = np.hstack([F[k,:,None] * X for k in range(Ktilde)])
+#    F = F / F.std(axis=0)
 
     # elastic net fit
     if alpha:
