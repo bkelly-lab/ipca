@@ -1059,9 +1059,9 @@ class InstrumentedPCA(BaseEstimator):
             itr += 1
             if not quiet:
                 print("Step", itr,
-                      "- Aggregate Update:", tol_current,
-                      "- Gamma_norm:", np.linalg.norm(Gamma_New),
-                      "- Factors_norm:", np.linalg.norm(Factors_New))
+                      "- Aggregate Update:", tol_current,)
+#                      "- Gamma_norm:", np.linalg.norm(Gamma_New),
+#                      "- Factors_norm:", np.linalg.norm(Factors_New))
 
             if log_trace:
                 trace_l.append({"step": itr,
