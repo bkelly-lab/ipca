@@ -1,6 +1,6 @@
 from sklearn.base import BaseEstimator, RegressorMixin
+from sklearn.linear_model import ElasticNet, Ridge
 from sklearn.model_selection import GroupKFold
-from sklearn.linear_model import ElasticNet
 from sklearn.metrics import r2_score
 from joblib import Parallel, delayed
 from numba import jit
@@ -1059,9 +1059,9 @@ class InstrumentedPCA(BaseEstimator):
             itr += 1
             if not quiet:
                 print("Step", itr,
-                      "- Aggregate Update:", tol_current,)
-#                      "- Gamma_norm:", np.linalg.norm(Gamma_New),
-#                      "- Factors_norm:", np.linalg.norm(Factors_New))
+                      "- Aggregate Update:", tol_current,
+                      "- Gamma_norm:", np.linalg.norm(Gamma_New),
+                      "- Factors_norm:", np.linalg.norm(Factors_New))
 
             if log_trace:
                 trace_l.append({"step": itr,
@@ -1208,7 +1208,8 @@ class InstrumentedPCA(BaseEstimator):
                     F_New = Parallel(n_jobs=self.n_jobs,
                                     backend=self.backend)(
                                 delayed(_Ft_fit_panel)(
-                                    Gamma_Old, X[tind,:], y[tind])
+                                    Gamma_Old, X[tind,:], y[tind],
+                                    self.alpha)
                                 for t, tind in enumerate(Tind))
                     F_New = np.stack(F_New, axis=1)
 
@@ -1216,7 +1217,7 @@ class InstrumentedPCA(BaseEstimator):
                     F_New = np.full((K, T), np.nan)
                     for t, tind in enumerate(Tind):
                         F_New[:,t] = _Ft_fit_panel(Gamma_Old, X[tind,:],
-                                                   y[tind])
+                                                   y[tind], self.alpha)
 
             # observed factors+latent factors case
             else:
@@ -1224,7 +1225,7 @@ class InstrumentedPCA(BaseEstimator):
                     F_New = Parallel(n_jobs=n_jobs, backend=backend)(
                                 delayed(_Ft_fit_PSF_panel)(
                                     Gamma_Old, X[tind,:], y[tind],
-                                    PSF[:,t], K, Ktilde)
+                                    PSF[:,t], K, Ktilde, self.alpha)
                                 for t, tind in enumerate(Tind))
                     F_New = np.stack(F_New, axis=1)
 
@@ -1233,10 +1234,7 @@ class InstrumentedPCA(BaseEstimator):
                     for t, tind in enumerate(Tind):
                         F_New[:,t] = _Ft_fit_PSF_panel(Gamma_Old, X[tind,:],
                                                        y[tind], PSF[:,t],
-                                                       K, Ktilde)
-
-                # rescale F
-                F_New = (F_New.T / F_New.std(axis=1)).T
+                                                       K, Ktilde, self.alpha)
 
         else:
             F_New = None
@@ -1246,19 +1244,22 @@ class InstrumentedPCA(BaseEstimator):
                                      Ktilde, self.alpha, self.l1_ratio,
                                      **kwargs)
 
-#        if K > 0:
-#            R1 = _numba_chol(Gamma_New[:, :K].T.dot(Gamma_New[:, :K])).T
-#            R2, _, _ = _numba_svd(R1.dot(F_New).dot(F_New.T).dot(R1.T))
-#            Gamma_New[:, :K] = _numba_lstsq(Gamma_New[:, :K].T,
-#                                            R1.T)[0].dot(R2)
-#            F_New = _numba_solve(R2, R1.dot(F_New))
+        # condition checks
 
-#        # Enforce sign convention for Gamma_Beta and F_New
-#        if K > 0:
-#            sg = np.sign(np.mean(F_New, axis=1)).reshape((-1, 1))
-#            sg[sg == 0] = 1
-#            Gamma_New[:, :K] = np.multiply(Gamma_New[:, :K], sg.T)
-#            F_New = np.multiply(F_New, sg)
+        # Enforce Orthogonality of Gamma_Beta and factors F
+        if K > 0 and self.alpha == 0.:
+            R1 = _numba_chol(Gamma_New[:, :K].T.dot(Gamma_New[:, :K])).T
+            R2, _, _ = _numba_svd(R1.dot(F_New).dot(F_New.T).dot(R1.T))
+            Gamma_New[:, :K] = _numba_lstsq(Gamma_New[:, :K].T,
+                                            R1.T)[0].dot(R2)
+            F_New = _numba_solve(R2, R1.dot(F_New))
+
+        # Enforce sign convention for Gamma_Beta and F_New
+        if K > 0 and self.alpha == 0.:
+            sg = np.sign(np.mean(F_New, axis=1)).reshape((-1, 1))
+            sg[sg == 0] = 1
+            Gamma_New[:, :K] = np.multiply(Gamma_New[:, :K], sg.T)
+            F_New = np.multiply(F_New, sg)
 
         return Gamma_New, F_New
 
@@ -1616,21 +1617,31 @@ def _Ft_fit_PSF_portfolio(Gamma_Old, W_t, Q_t, PSF_t, K, Ktilde):
     return np.squeeze(_numba_solve(m1, m2.reshape((-1, 1))))
 
 
-def _Ft_fit_panel(Gamma_Old, X_t, y_t):
+def _Ft_fit_panel(Gamma_Old, X_t, y_t, alpha):
     """fits F_t using panel data"""
 
     exog_t = X_t.dot(Gamma_Old)
-    Ft = _numba_lstsq(exog_t, y_t)[0]
+    if alpha > 0:
+        mod = Ridge(alpha=1., fit_intercept=False)
+        mod = mod.fit(exog_t, y_t)
+        Ft = mod.coef_
+    else:
+        Ft = _numba_lstsq(exog_t, y_t)[0]
 
     return Ft
 
 
-def _Ft_fit_PSF_panel(Gamma_Old, X_t, y_t, PSF_t, K, Ktilde):
+def _Ft_fit_PSF_panel(Gamma_Old, X_t, y_t, PSF_t, K, Ktilde, alpha):
     """fits F_t using panel data with PSF"""
 
     exog_t = X_t.dot(Gamma_Old)
     y_t_resid = y_t - exog_t[:,K:Ktilde].dot(PSF_t)
-    Ft = _numba_lstsq(exog_t[:,:K], y_t_resid)[0]
+    if alpha > 0:
+        mod = Ridge(alpha=1., fit_intercept=False)
+        mod = mod.fit(exog_t[:, :K], y_t_resid)
+        Ft = mod.coef_
+    else:
+        Ft = _numba_lstsq(exog_t[:,:K], y_t_resid)[0]
 
     return Ft
 
