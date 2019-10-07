@@ -683,7 +683,7 @@ class InstrumentedPCA(BaseEstimator):
                                 mean_factor=mean_factor,
                                 data_type="panel")
 
-            return r2_score(y, yhat)
+            return 1-np.nansum((yhat-y)**2)/np.nansum(y**2)
 
         elif data_type == "portfolio":
 
