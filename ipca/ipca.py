@@ -1,5 +1,6 @@
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.linear_model import ElasticNet, Ridge
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.model_selection import GroupKFold
 from sklearn.metrics import r2_score
 from joblib import Parallel, delayed
@@ -11,6 +12,7 @@ import progressbar
 import itertools
 import warnings
 import time
+
 
 class InstrumentedPCA(BaseEstimator):
     """
@@ -54,11 +56,14 @@ class InstrumentedPCA(BaseEstimator):
 
     backend : str
         label for Joblib backend used for F step in ALS
+
+    cnvg_depth_max : scalar
+        maximum number of times convergence warnings are allowed in ALS
     """
 
     def __init__(self, n_factors=1, intercept=False, max_iter=10000,
                  min_iter=0, iter_tol=10e-6, alpha=0., l1_ratio=1.,
-                 n_jobs=1, backend="loky"):
+                 n_jobs=1, backend="loky", cnvg_depth_max=10):
 
         # paranoid parameter checking to make it easier for users to know when
         # they have gone awry and to make it safe to assume some variables can
@@ -999,6 +1004,7 @@ class InstrumentedPCA(BaseEstimator):
 
         # Estimation Step
         tol_current = 1
+        cnvg_depth = 0
 
         itr = 0
 
@@ -1007,8 +1013,11 @@ class InstrumentedPCA(BaseEstimator):
                (tol_current > self.iter_tol)) or
                (itr < self.min_iter)):
 
-            Gamma_New, Factors_New = ALS_fit(Gamma_Old, *ALS_inputs,
-                                             PSF=PSF, **kwargs)
+            Gamma_New, Factors_New, cnvg_depth = ALS_fit(Gamma_Old,
+                                                         *ALS_inputs,
+                                                         PSF=PSF,
+                                                         cnvg_depth=cnvg_depth,
+                                                         **kwargs)
 
             # select tolerance
             if cnvg_method == "max_abs_diff":
@@ -1081,10 +1090,14 @@ class InstrumentedPCA(BaseEstimator):
             trace = pd.DataFrame(trace_l)
             self.trace = trace
 
+        # reset ALS cnvg check
+        self.cnvg_depth = 0
+
         return Gamma_New, Factors_New
 
 
-    def _ALS_fit_portfolio(self, Gamma_Old, Q, W, val_obs, PSF=None, **kwargs):
+    def _ALS_fit_portfolio(self, Gamma_Old, Q, W, val_obs, PSF=None,
+                           cnvg_depth=0, **kwargs):
         """Alternating least squares procedure to fit params
 
         Runs using portfolio data as input
@@ -1095,6 +1108,8 @@ class InstrumentedPCA(BaseEstimator):
         complete update procedure and will need to be called repeatedly using
         the updated Gamma's and factors as inputs.
         """
+
+        # TODO cnvg depth isn't used here
 
         T = self.metad["T"]
 
@@ -1167,11 +1182,31 @@ class InstrumentedPCA(BaseEstimator):
             Gamma_New[:, :K] = np.multiply(Gamma_New[:, :K], sg.T)
             F_New = np.multiply(F_New, sg)
 
-        return Gamma_New, F_New
+        return Gamma_New, F_New, cnvg_depth
 
 
-    def _ALS_fit_panel(self, Gamma_Old, X, y, indices, PSF=None, **kwargs):
+    def _ALS_fit_panel(self, Gamma_Old, X, y, indices, PSF=None,
+                       econ_ident=False, cnvg_depth=0, **kwargs):
         """Alternating least squares procedure to fit params
+
+        Parameters
+        ----------
+        econ_ident : bool
+            whether to use the economically meaningful identification
+            procedure
+
+            True : sets the first K x K elements of Gamma to an
+            identity matrix (pinning their relationship to the first K chars)
+
+            False : regularize both the Gamma and factor estimation, the
+            factor regularization is only L2 and not selected by the user
+
+        cnvg_depth : scalar
+            number of times where the duality gap has been greater than
+            tolerance for elastic net esitmation
+
+        Notes
+        -----
 
         Runs using panel data as input
 
@@ -1209,7 +1244,7 @@ class InstrumentedPCA(BaseEstimator):
                                     backend=self.backend)(
                                 delayed(_Ft_fit_panel)(
                                     Gamma_Old, X[tind,:], y[tind],
-                                    self.alpha)
+                                    self.alpha, econ_ident)
                                 for t, tind in enumerate(Tind))
                     F_New = np.stack(F_New, axis=1)
 
@@ -1217,7 +1252,8 @@ class InstrumentedPCA(BaseEstimator):
                     F_New = np.full((K, T), np.nan)
                     for t, tind in enumerate(Tind):
                         F_New[:,t] = _Ft_fit_panel(Gamma_Old, X[tind,:],
-                                                   y[tind], self.alpha)
+                                                   y[tind], self.alpha,
+                                                   econ_ident)
 
             # observed factors+latent factors case
             else:
@@ -1225,7 +1261,8 @@ class InstrumentedPCA(BaseEstimator):
                     F_New = Parallel(n_jobs=n_jobs, backend=backend)(
                                 delayed(_Ft_fit_PSF_panel)(
                                     Gamma_Old, X[tind,:], y[tind],
-                                    PSF[:,t], K, Ktilde, self.alpha)
+                                    PSF[:,t], K, Ktilde, self.alpha,
+                                    econ_ident)
                                 for t, tind in enumerate(Tind))
                     F_New = np.stack(F_New, axis=1)
 
@@ -1234,20 +1271,31 @@ class InstrumentedPCA(BaseEstimator):
                     for t, tind in enumerate(Tind):
                         F_New[:,t] = _Ft_fit_PSF_panel(Gamma_Old, X[tind,:],
                                                        y[tind], PSF[:,t],
-                                                       K, Ktilde, self.alpha)
+                                                       K, Ktilde, self.alpha,
+                                                       econ_ident)
 
         else:
             F_New = None
 
         # ALS Step 2
-        Gamma_New = _Gamma_fit_panel(F_New, Gamma_Old, X, y, indices, PSF, L,
-                                     Ktilde, self.alpha, self.l1_ratio,
-                                     **kwargs)
+        Gamma_New, cnvg_depth = _Gamma_fit_panel(F_New, Gamma_Old, X, y,
+                                                 indices, PSF, L, Ktilde,
+                                                 self.alpha, self.l1_ratio,
+                                                 econ_ident, cnvg_depth,
+                                                 **kwargs)
+
+        if cnvg_depth >= self.cnvg_depth_max:
+            with warnings.catch_warnings():
+                warnings.filterwarnings('error')
+                raise ConvergenceWarning("Elastic net estimator is not "
+                                         "converging after %d iterations "
+                                         "with a large duality gap" %
+                                         cnvg_depth)
 
         # condition checks
 
         # Enforce Orthogonality of Gamma_Beta and factors F
-        if K > 0 and self.alpha == 0.:
+        if K > 0 and self.alpha == 0. and econ_ident == False:
             R1 = _numba_chol(Gamma_New[:, :K].T.dot(Gamma_New[:, :K])).T
             R2, _, _ = _numba_svd(R1.dot(F_New).dot(F_New.T).dot(R1.T))
             Gamma_New[:, :K] = _numba_lstsq(Gamma_New[:, :K].T,
@@ -1255,13 +1303,13 @@ class InstrumentedPCA(BaseEstimator):
             F_New = _numba_solve(R2, R1.dot(F_New))
 
         # Enforce sign convention for Gamma_Beta and F_New
-        if K > 0 and self.alpha == 0.:
+        if K > 0 and self.alpha == 0. and econ_ident == False:
             sg = np.sign(np.mean(F_New, axis=1)).reshape((-1, 1))
             sg[sg == 0] = 1
             Gamma_New[:, :K] = np.multiply(Gamma_New[:, :K], sg.T)
             F_New = np.multiply(F_New, sg)
 
-        return Gamma_New, F_New
+        return Gamma_New, F_New, cnvg_depth
 
 
 def _prep_input(X, y=None, indices=None):
@@ -1617,11 +1665,11 @@ def _Ft_fit_PSF_portfolio(Gamma_Old, W_t, Q_t, PSF_t, K, Ktilde):
     return np.squeeze(_numba_solve(m1, m2.reshape((-1, 1))))
 
 
-def _Ft_fit_panel(Gamma_Old, X_t, y_t, alpha):
+def _Ft_fit_panel(Gamma_Old, X_t, y_t, alpha, econ_ident):
     """fits F_t using panel data"""
 
     exog_t = X_t.dot(Gamma_Old)
-    if alpha > 0:
+    if alpha > 0 and econ_ident == False:
         mod = Ridge(alpha=1., fit_intercept=False)
         mod = mod.fit(exog_t, y_t)
         Ft = mod.coef_
@@ -1631,12 +1679,13 @@ def _Ft_fit_panel(Gamma_Old, X_t, y_t, alpha):
     return Ft
 
 
-def _Ft_fit_PSF_panel(Gamma_Old, X_t, y_t, PSF_t, K, Ktilde, alpha):
+def _Ft_fit_PSF_panel(Gamma_Old, X_t, y_t, PSF_t, K, Ktilde, alpha,
+                      econ_ident):
     """fits F_t using panel data with PSF"""
 
     exog_t = X_t.dot(Gamma_Old)
     y_t_resid = y_t - exog_t[:,K:Ktilde].dot(PSF_t)
-    if alpha > 0:
+    if alpha > 0 and econ_ident == False:
         mod = Ridge(alpha=1., fit_intercept=False)
         mod = mod.fit(exog_t[:, :K], y_t_resid)
         Ft = mod.coef_
@@ -1694,8 +1743,15 @@ def _Gamma_fit_portfolio(F_New, Q, W, val_obs, PSF, L, K, Ktilde, T):
 
 
 def _Gamma_fit_panel(F_New, Gamma_Old, X, y, indices, PSF, L, Ktilde,
-                     alpha, l1_ratio, **kwargs):
-    """helper function for estimating vectorized Gamma with panel"""
+                     alpha, l1_ratio, econ_ident, cnvg_depth,
+                     **kwargs):
+    """helper function for estimating vectorized Gamma with panel
+
+    Parameters
+    ----------
+    cnvg_depth : scalar
+        current number of convergence warnings caught
+    """
 
     # join observed factors with latent factors and map to panel
     if PSF is None:
@@ -1707,25 +1763,44 @@ def _Gamma_fit_panel(F_New, Gamma_Old, X, y, indices, PSF, L, Ktilde,
             F = np.vstack((F_New, PSF))
     F = F[:,indices[:,1]]
 
+    # generate residualized y if econ_ident
+    if econ_ident:
+        yt = F.T * X[:,:Ktilde]
+        yt = yt.sum(axis=1)
+#        y -= yt
+        X = X[:,Ktilde:]
+
     # interact factors and characteristics
     F = np.hstack([F[k,:,None] * X for k in range(Ktilde)])
-#    F = F / F.std(axis=0)
+
+    # prep tolerance multiplier
+    tol = np.dot(y, y)
 
     # elastic net fit
     if alpha:
         mod = ElasticNet(alpha=alpha, l1_ratio=l1_ratio,
                          warm_start=True, **kwargs)
-        mod.coef_ = Gamma_Old.reshape(Ktilde * L)
+        if econ_ident:
+            mod.coef_ = Gamma_Old[Ktilde:,:].reshape(Ktilde * (L - Ktilde))
+        else:
+            mod.coef_ = Gamma_Old.reshape(Ktilde * L)
         mod.fit(F, y)
+        # TODO this will technically fail with multiple targets...
+        if mod.tol * tol < mod.dual_gap_:
+            cnvg_depth += 1
         gamma = mod.coef_
 
     # OLS fit
     else:
         gamma = _numba_lstsq(F, y)[0]
 
-    gamma = gamma.reshape((Ktilde, L)).T
+    if econ_ident:
+        gamma = gamma.reshape((Ktilde, (L - Ktilde))).T
+        gamma = np.vstack([np.identity(Ktilde), gamma])
+    else:
+        gamma = gamma.reshape((Ktilde, L)).T
 
-    return gamma
+    return gamma, cnvg_depth
 
 
 def _BS_Walpha_sub(model, n, d):
