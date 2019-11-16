@@ -20,7 +20,6 @@ import numpy as np
 from statsmodels.datasets import grunfeld
 data = grunfeld.load_pandas().data
 data.year = data.year.astype(np.int64)
-data.firm = data.firm.apply(lambda x: x.decode('utf-8'))
 
 # Establish unique IDs to conform with package
 N = len(np.unique(data.firm))
@@ -33,8 +32,8 @@ y = data['invest']
 X = data.drop('invest', axis=1)
 
 # Call ipca
-from ipca import IPCARegressor
-regr = IPCARegressor(n_factors=1, intercept=False)
+from ipca import InstrumentedPCA
+regr = InstrumentedPCA(n_factors=1, intercept=False)
 regr = regr.fit(X=X, y=y)
 Gamma, Factors = regr.get_factors(label_ind=True)
 ```
