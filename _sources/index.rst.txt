@@ -5,7 +5,7 @@
 
 IPCA Package Documentation
 ================================
-This package provides a Python (3.5+) implementation of the Instrumented
+This package provides a Python (3.6+) implementation of the Instrumented
 Principal Components Analysis framework by Kelly, Pruitt, Su (2017)
 [1_, 2_].
 
