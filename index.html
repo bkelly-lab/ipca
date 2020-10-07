@@ -156,7 +156,464 @@ Principal Components Analysis framework by Kelly, Pruitt, Su (2017)
 [<a class="reference external" href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2983919">1</a>, <a class="reference external" href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3032013">2</a>].</p>
 <div class="toctree-wrapper compound">
 </div>
-<span class="target" id="module-ipca"></span></div>
+<span class="target" id="module-ipca"></span><dl class="py class">
+<dt id="ipca.InstrumentedPCA">
+<em class="property">class </em><code class="sig-prename descclassname">ipca.</code><code class="sig-name descname">InstrumentedPCA</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">n_factors</span><span class="o">=</span><span class="default_value">1</span></em>, <em class="sig-param"><span class="n">intercept</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">max_iter</span><span class="o">=</span><span class="default_value">10000</span></em>, <em class="sig-param"><span class="n">iter_tol</span><span class="o">=</span><span class="default_value">1e-05</span></em>, <em class="sig-param"><span class="n">alpha</span><span class="o">=</span><span class="default_value">0.0</span></em>, <em class="sig-param"><span class="n">l1_ratio</span><span class="o">=</span><span class="default_value">1.0</span></em>, <em class="sig-param"><span class="n">n_jobs</span><span class="o">=</span><span class="default_value">1</span></em>, <em class="sig-param"><span class="n">backend</span><span class="o">=</span><span class="default_value">'loky'</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">sklearn.base.BaseEstimator</span></code></p>
+<p>This class implements the IPCA algorithm by Kelly, Pruitt, Su (2017).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_factors</strong> (<em>int, default=1</em>) – The total number of factors to estimate. Note, the number of
+estimated factors is automatically reduced by the number of
+pre-specified factors. For example, if n_factors = 2 and one
+pre-specified factor is passed, then InstrumentedPCA will estimate
+one factor estimated in addition to the pre-specified factor.</p></li>
+<li><p><strong>intercept</strong> (<em>boolean, default=False</em>) – Determines whether the model is estimated with or without an intercept</p></li>
+<li><p><strong>max_iter</strong> (<em>int, default=10000</em>) – Maximum number of alternating least squares updates before the
+estimation is stopped</p></li>
+<li><p><strong>iter_tol</strong> (<em>float, default=10e-6</em>) – Tolerance threshold for stopping the alternating least squares
+procedure</p></li>
+<li><p><strong>alpha</strong> (<em>scalar</em>) – Regularizing constant for Gamma estimation.  If this is set to
+zero then the estimation defaults to non-regularized.</p></li>
+<li><p><strong>l1_ratio</strong> (<em>scalar</em>) – Ratio of l1 and l2 penalties for elastic net Gamma fit.</p></li>
+<li><p><strong>n_jobs</strong> (<em>scalar</em>) – number of jobs for F step estimation in ALS, if set to one no
+parallelization is done</p></li>
+<li><p><strong>backend</strong> (<em>str</em>) – label for Joblib backend used for F step in ALS</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="ipca.InstrumentedPCA.BS_Walpha">
+<code class="sig-name descname">BS_Walpha</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">ndraws</span><span class="o">=</span><span class="default_value">1000</span></em>, <em class="sig-param"><span class="n">n_jobs</span><span class="o">=</span><span class="default_value">1</span></em>, <em class="sig-param"><span class="n">backend</span><span class="o">=</span><span class="default_value">'loky'</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.BS_Walpha"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.BS_Walpha" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bootstrap inference on the hypothesis Gamma_alpha = 0</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ndraws</strong> (<em>integer, default=1000</em>) – Number of bootstrap draws and re-estimations to be performed</p></li>
+<li><p><strong>backend</strong> (<em>optional</em>) – Value is either ‘loky’ or ‘multiprocessing’</p></li>
+<li><p><strong>n_jobs</strong> (<em>integer</em>) – Number of workers to be used. If -1, all available workers are
+used.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><strong>pval</strong> – P-value from the hypothesis test H0: Gamma_alpha=0</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="ipca.InstrumentedPCA.BS_Wbeta">
+<code class="sig-name descname">BS_Wbeta</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">l</span></em>, <em class="sig-param"><span class="n">ndraws</span><span class="o">=</span><span class="default_value">1000</span></em>, <em class="sig-param"><span class="n">n_jobs</span><span class="o">=</span><span class="default_value">1</span></em>, <em class="sig-param"><span class="n">backend</span><span class="o">=</span><span class="default_value">'loky'</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.BS_Wbeta"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.BS_Wbeta" title="Permalink to this definition">¶</a></dt>
+<dd><p>Test of instrument significance.
+Bootstrap inference on the hypothesis  l-th column of Gamma_beta = 0.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>l</strong> (<em>integer</em>) – Position of the characteristics for which the bootstrap is to be
+carried out. For example, if there are 10 characteristics, l is in
+the range 0 to 9 (left-/right-inclusive).</p></li>
+<li><p><strong>ndraws</strong> (<em>integer, default=1000</em>) – Number of bootstrap draws and re-estimations to be performed</p></li>
+<li><p><strong>n_jobs</strong> (<em>integer</em>) – Number of workers to be used for multiprocessing.
+If -1, all available Workers are used.</p></li>
+<li><p><strong>backend</strong> (<em>optional</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><strong>pval</strong> – P-value from the hypothesis test H0: Gamma_alpha=0</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="ipca.InstrumentedPCA.fit">
+<code class="sig-name descname">fit</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span></em>, <em class="sig-param"><span class="n">y</span></em>, <em class="sig-param"><span class="n">indices</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">PSF</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">Gamma</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">Factors</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">data_type</span><span class="o">=</span><span class="default_value">'portfolio'</span></em>, <em class="sig-param"><span class="n">label_ind</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.fit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.fit" title="Permalink to this definition">¶</a></dt>
+<dd><p>Fits the regressor to the data using an alternating least squares
+scheme.</p>
+<dl class="field-list">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul>
+<li><p><strong>X</strong> (<em>numpy array or pandas DataFrame</em>) – matrix of characteristics where each row corresponds to a
+entity-time pair in indices.  The number of characteristics
+(columns here) used as instruments is L.</p>
+<p>If given as a DataFrame, we assume that it contains a MutliIndex
+mapping to each entity-time pair</p>
+</li>
+<li><p><strong>y</strong> (<em>numpy array or pandas Series</em>) – dependent variable where indices correspond to those in X</p>
+<p>If given as a Series, we assume that it contains a MutliIndex
+mapping to each entity-time pair</p>
+</li>
+<li><p><strong>indices</strong> (<em>numpy array, optional</em>) – array containing the panel indices.  Should consist of two
+columns:</p>
+<ul class="simple">
+<li><p>Column 1: entity id (i)</p></li>
+<li><p>Column 2: time index (t)</p></li>
+</ul>
+<p>The panel may be unbalanced. The number of unique entities is
+n_samples, the number of unique dates is T, and the number of
+characteristics used as instruments is L.</p>
+</li>
+<li><p><strong>PSF</strong> (<em>numpy array, optional</em>) – Set of pre-specified factors as matrix of dimension (M, T)</p></li>
+<li><p><strong>Gamma</strong> (<em>numpy array, optional</em>) – If provided, starting values for Gamma (see Notes)</p></li>
+<li><p><strong>Factors</strong> (<em>numpy array</em>) – If provided, starting values for Factors (see Notes)</p></li>
+<li><p><strong>data_type</strong> (<em>str</em>) – label for data-type used for ALS estimation, one of the following:</p>
+<ol class="arabic simple">
+<li><p>panel</p></li>
+</ol>
+<p>ALS uses the untransformed X and y for the estimation.</p>
+<p>This is currently marginally slower than the portfolio estimation
+but is necessary when performing regularized estimation
+(alpha &gt; 0).</p>
+<ol class="arabic simple" start="2">
+<li><p>portfolio</p></li>
+</ol>
+<p>ALS uses a matrix of characteristic weighted portfolios (Q)
+as well as a matrix of weights (W) and count of non-missing
+observations for each time period (val_obs) for the estimation.</p>
+<p>See _build_portfolio for details on how these variables are formed
+from the initial X and y.</p>
+<p>Currently, the bootstrap procedure is only implemented in terms
+of the portfolio data_type.</p>
+</li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>self</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Updates InstrumentedPCA instances to include param estimates:</p>
+<dl class="simple">
+<dt>Gamma<span class="classifier">numpy array</span></dt><dd><p>Array with dimensions (L, n_factors) containing the
+mapping between characteristics and factors loadings. If there
+are M many pre-specified factors in the model then the
+matrix returned is of dimension (L, (n_factors+M)).
+If an intercept is included in the model, its loadings are
+returned in the last column of Gamma.</p>
+</dd>
+<dt>Factors<span class="classifier">numpy array</span></dt><dd><p>Array with dimensions (n_factors, T) containing the estimated
+factors. If pre-specified factors were passed the returned
+array is of dimension ((n_factors - M), T),
+corresponding to the n_factors - M many factors estimated on
+top of the pre-specified ones.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="ipca.InstrumentedPCA.fit_path">
+<code class="sig-name descname">fit_path</code><span class="sig-paren">(</span><em class="sig-param">X</em>, <em class="sig-param">y</em>, <em class="sig-param">indices=None</em>, <em class="sig-param">PSF=None</em>, <em class="sig-param">alpha_l=None</em>, <em class="sig-param">n_splits=10</em>, <em class="sig-param">split_method=&lt;class 'sklearn.model_selection._split.GroupKFold'&gt;</em>, <em class="sig-param">n_jobs=1</em>, <em class="sig-param">backend='loky'</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.fit_path"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.fit_path" title="Permalink to this definition">¶</a></dt>
+<dd><p>Fit a path of elastic net fits for various regularizing constants</p>
+<dl class="field-list">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul>
+<li><p><strong>X</strong> (<em>numpy array or pandas DataFrame</em>) – matrix of characteristics where each row corresponds to a
+entity-time pair in indices.  The number of characteristics
+(columns here) used as instruments is L.</p>
+<p>If given as a DataFrame, we assume that it contains a mutliindex
+mapping to each entity-time pair</p>
+</li>
+<li><p><strong>y</strong> (<em>numpy array or pandas Series</em>) – dependent variable where indices correspond to those in X</p>
+<p>If given as a Series, we assume that it contains a mutliindex
+mapping to each entity-time pair</p>
+</li>
+<li><p><strong>indices</strong> (<em>numpy array, optional</em>) – array containing the panel indices.  Should consist of two
+columns:</p>
+<ul class="simple">
+<li><p>Column 1: entity id (i)</p></li>
+<li><p>Column 2: time index (t)</p></li>
+</ul>
+<p>The panel may be unbalanced. The number of unique entities is
+n_samples, the number of unique dates is T, and the number of
+characteristics used as instruments is L.</p>
+</li>
+<li><p><strong>PSF</strong> (<em>numpy array, optional</em>) – Set of pre-specified factors as matrix of dimension (M, T)</p></li>
+<li><p><strong>alpha_l</strong> (<em>iterable, optional</em>) – list of regularizing constants to use for path</p></li>
+<li><p><strong>n_splits</strong> (<em>scalar</em>) – number of CV partitions</p></li>
+<li><p><strong>split_method</strong> (<em>sklearn cross-validation generator factory</em>) – method to generate CV partitions</p></li>
+<li><p><strong>n_jobs</strong> (<em>scalar</em>) – number of jobs for parallel CV estimation</p></li>
+<li><p><strong>backend</strong> (<em>str</em>) – label for joblib backend</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><strong>cvmse</strong> – array of dim (P x (C + 1)) where P is the number of reg
+constants and C is the number of CV partitions</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>numpy matrix</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="ipca.InstrumentedPCA.get_factors">
+<code class="sig-name descname">get_factors</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">label_ind</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.get_factors"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.get_factors" title="Permalink to this definition">¶</a></dt>
+<dd><p>returns a tuple containing Gamma and Factors</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>label_ind</strong> (<em>bool</em>) – if provided we return the factors as pandas DataFrames with
+index info applied</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>containing Gamma and Factors</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="ipca.InstrumentedPCA.predict">
+<code class="sig-name descname">predict</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">indices</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">W</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">mean_factor</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">data_type</span><span class="o">=</span><span class="default_value">'panel'</span></em>, <em class="sig-param"><span class="n">label_ind</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>wrapper around different data type predict methods</p>
+<dl class="field-list">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul>
+<li><p><strong>X</strong> (<em>numpy array or pandas DataFrame, optional</em>) – matrix of characteristics where each row corresponds to a
+entity-time pair in indices.  The number of characteristics
+(columns here) used as instruments is L.</p>
+<p>If given as a DataFrame, we assume that it contains a mutliindex
+mapping to each entity-time pair</p>
+<p>If None we use the values associated with the current model</p>
+</li>
+<li><p><strong>indices</strong> (<em>numpy array, optional</em>) – array containing the panel indices.  Should consist of two
+columns:</p>
+<ul class="simple">
+<li><p>Column 1: entity id (i)</p></li>
+<li><p>Column 2: time index (t)</p></li>
+</ul>
+<p>The panel may be unbalanced. The number of unique entities is
+n_samples, the number of unique dates is T, and the number of
+characteristics used as instruments is L.</p>
+<p>If None we use the values associated with the current model</p>
+</li>
+<li><p><strong>W</strong> (<em>numpy array, optional</em>) – portfolio weight matrix of dimension (L, L, T)</p>
+<p>If None, we use the values associated with the current model</p>
+</li>
+<li><p><strong>mean_factor</strong> (<em>boolean</em>) – If true, the estimated factors are averaged in the time-series
+before prediction.</p></li>
+<li><p><strong>data_type</strong> (<em>str</em>) – label for data-type used for prediction, one of the following:</p>
+<ol class="arabic simple">
+<li><p>panel</p></li>
+</ol>
+<p>Uses the untransformed X and y for the estimation.</p>
+<ol class="arabic simple" start="2">
+<li><p>portfolio</p></li>
+</ol>
+<p>Uses a matrix of characteristic weighted portfolios (Q)
+as well as a matrix of weights (W) and count of non-missing
+observations for each time period (val_obs) for the estimation.</p>
+<p>See _build_portfolio for details on how these variables are formed
+from the initial X and y.</p>
+</li>
+<li><p><strong>label_ind</strong> (<em>bool</em>) – whether to apply the indices to fitted values and return
+pandas Series</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><p>The exact value returned depends on two things:</p>
+<ol class="arabic">
+<li><dl>
+<dt>The data_type</dt><dd><p>a. If panel data_type is specified, this will be a series of
+values for the panel ys</p>
+<p>b. If portfolio data_type is specified, this will a matrix
+of predicted char formed portfolio Qs</p>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt>label_ind</dt><dd><p>If label_ind is True, we return pandas variants of the
+predicted values.  If not, we return the underlying
+numpy arrays.</p>
+</dd>
+</dl>
+</li>
+</ol>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>numpy array or pandas DataFrame/Series</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="ipca.InstrumentedPCA.predictOOS">
+<code class="sig-name descname">predictOOS</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">y</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">indices</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">mean_factor</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.predictOOS"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.predictOOS" title="Permalink to this definition">¶</a></dt>
+<dd><p>Predicts time t+1 observation using an out-of-sample design.</p>
+<dl class="field-list">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul>
+<li><p><strong>X</strong> (<em>numpy array</em>) – X of stacked data. Each row corresponds to an observation
+(i,t) where i denotes the entity index and t denotes
+the time index. All data must correspond to time t, i.e. all
+observations occur on the same date.
+If an observation contains missing data NaN will be returned.
+Note that the number of characteristics (L) passed,
+has to match the number of characteristics used when fitting
+the regressor.
+The columns of the panel are organized in the following order:</p>
+<ul class="simple">
+<li><p>Column 1: entity id (i)</p></li>
+<li><p>Column 2: time index (t)</p></li>
+<li><p>Column 3 to column 3+L: characteristics.</p></li>
+</ul>
+</li>
+<li><p><strong>y</strong> (<em>numpy array</em>) – dependent variable where indices correspond to those in X</p></li>
+<li><p><strong>indices</strong> (<em>numpy array</em>) – array containing the panel indices.  Should consist of two
+columns:</p>
+<ul class="simple">
+<li><p>Column 1: entity id (i)</p></li>
+<li><p>Column 2: time index (t)</p></li>
+</ul>
+<p>The panel may be unbalanced. The number of unique entities is
+n_samples, the number of unique dates is T, and the number of
+characteristics used as instruments is L.</p>
+</li>
+<li><p><strong>mean_factor</strong> (<em>boolean</em>) – If true, the estimated factors are averaged in the time-series
+before prediction.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><strong>ypred</strong> – The length of the returned array matches the
+the length of data. A nan will be returned if there is missing
+characteristics information.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>numpy array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="ipca.InstrumentedPCA.predict_panel">
+<code class="sig-name descname">predict_panel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span></em>, <em class="sig-param"><span class="n">indices</span></em>, <em class="sig-param"><span class="n">T</span></em>, <em class="sig-param"><span class="n">mean_factor</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.predict_panel"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.predict_panel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Predicts fitted values for a previously fitted regressor + panel data</p>
+<dl class="field-list">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul>
+<li><p><strong>X</strong> (<em>numpy array</em>) – matrix of characteristics where each row corresponds to a
+entity-time pair in indices.  The number of characteristics
+(columns here) used as instruments is L.</p></li>
+<li><p><strong>indices</strong> (<em>numpy array</em>) – array containing the panel indices.  Should consist of two
+columns:</p>
+<ul class="simple">
+<li><p>Column 1: entity id (i)</p></li>
+<li><p>Column 2: time index (t)</p></li>
+</ul>
+<p>The panel may be unbalanced. The number of unique entities is
+n_samples, the number of unique dates is T, and the number of
+characteristics used as instruments is L.</p>
+</li>
+<li><p><strong>T</strong> (<em>scalar</em>) – number of time periods in X</p></li>
+<li><p><strong>mean_factor</strong> (<em>boolean</em>) – If true, the estimated factors are averaged in the time-series
+before prediction.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><strong>ypred</strong> – The length of the returned array matches the length of data.
+A nan will be returned if there is missing chars information.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>numpy array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="ipca.InstrumentedPCA.predict_portfolio">
+<code class="sig-name descname">predict_portfolio</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">W</span></em>, <em class="sig-param"><span class="n">L</span></em>, <em class="sig-param"><span class="n">T</span></em>, <em class="sig-param"><span class="n">mean_factor</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.predict_portfolio"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.predict_portfolio" title="Permalink to this definition">¶</a></dt>
+<dd><p>Predicts fitted values for a previously fitted regressor + portfolios</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>W</strong> (<em>numpy array</em>) – portfolio weight matrix of dimension (L, L, T)</p></li>
+<li><p><strong>L</strong> (<em>scalar</em>) – number of characteristics</p></li>
+<li><p><strong>T</strong> (<em>scalar</em>) – number of time periods</p></li>
+<li><p><strong>mean_factor</strong> (<em>boolean</em>) – If true, the estimated factors are averaged in the time-series
+before prediction.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><strong>Qpred</strong> – Same dimensions as a char formed portfolios (Q)</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>numpy array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="ipca.InstrumentedPCA.score">
+<code class="sig-name descname">score</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span></em>, <em class="sig-param"><span class="n">y</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">indices</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">mean_factor</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">data_type</span><span class="o">=</span><span class="default_value">'panel'</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.score"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.score" title="Permalink to this definition">¶</a></dt>
+<dd><p>generate R^2</p>
+<dl class="field-list">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul>
+<li><p><strong>X</strong> (<em>numpy array or pandas DataFrame</em>) – matrix of characteristics where each row corresponds to a
+entity-time pair in indices.  The number of characteristics
+(columns here) used as instruments is L.</p>
+<p>If given as a DataFrame, we assume that it contains a mutliindex
+mapping to each entity-time pair</p>
+<p>If None we use the values associated with the current model</p>
+</li>
+<li><p><strong>y</strong> (<em>numpy array or pandas Series, optional</em>) – dependent variable where indices correspond to those in X</p>
+<p>If given as a Series, we assume that it contains a mutliindex
+mapping to each entity-time pair</p>
+</li>
+<li><p><strong>indices</strong> (<em>numpy array, optional</em>) – array containing the panel indices.  Should consist of two
+columns:</p>
+<ul class="simple">
+<li><p>Column 1: entity id (i)</p></li>
+<li><p>Column 2: time index (t)</p></li>
+</ul>
+<p>The panel may be unbalanced. The number of unique entities is
+n_samples, the number of unique dates is T, and the number of
+characteristics used as instruments is L.</p>
+<p>If None we use the values associated with the current model</p>
+</li>
+<li><p><strong>mean_factor</strong> (<em>boolean</em>) – If true, the estimated factors are averaged in the time-series
+before prediction.</p></li>
+<li><p><strong>data_type</strong> (<em>str</em>) – label for data-type used for prediction, one of the following:</p>
+<ol class="arabic simple">
+<li><p>panel</p></li>
+</ol>
+<p>Uses the untransformed X and y for the estimation.</p>
+<ol class="arabic simple" start="2">
+<li><p>portfolio</p></li>
+</ol>
+<p>Uses a matrix of characteristic weighted portfolios (Q)
+as well as a matrix of weights (W) and count of non-missing
+observations for each time period (val_obs) for the estimation.</p>
+<p>See _build_portfolio for details on how these variables are formed
+from the initial X and y.</p>
+</li>
+<li><p><strong>label_ind</strong> (<em>bool</em>) – whether to apply the indices to fitted values and return
+pandas Series</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><strong>r2</strong> – summary of model performance</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>scalar</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
 <div class="section" id="indices-and-tables">
 <h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h1>
 <ul class="simple">
