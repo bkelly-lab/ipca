@@ -1136,20 +1136,28 @@ class InstrumentedPCA(BaseEstimator):
 
         # condition checks
 
-        # Enforce Orthogonality of Gamma_Beta and factors F
         if K > 0:
+            # Enforce Orthogonality in Gamma_alpha and Gamma_beta
             R1 = _numba_chol(Gamma_New[:, :K].T.dot(Gamma_New[:, :K])).T
             R2, _, _ = _numba_svd(R1.dot(F_New).dot(F_New.T).dot(R1.T))
             Gamma_New[:, :K] = _numba_lstsq(Gamma_New[:, :K].T,
                                             R1.T)[0].dot(R2)
             F_New = _numba_solve(R2, R1.dot(F_New))
 
-        # Enforce sign convention for Gamma_Beta and F_New
-        if K > 0:
+            # Enforce sign convention for Gamma_Beta and F_New
             sg = np.sign(np.mean(F_New, axis=1)).reshape((-1, 1))
             sg[sg == 0] = 1
             Gamma_New[:, :K] = np.multiply(Gamma_New[:, :K], sg.T)
             F_New = np.multiply(F_New, sg)
+
+            if PSF is not None:
+                Gamma_New[:, K:] = (np.identity(Gamma_New.shape[0]) - Gamma_New[:, :K].dot(Gamma_New[:, :K].T)).dot(Gamma_New[:, K:])
+                F_New += Gamma_New[:, :K].T.dot(Gamma_New[:, K:]).dot(PSF)
+
+                sg = np.sign(np.mean(F_New, axis=1)).reshape((-1, 1))
+                sg[sg == 0] = 1
+                Gamma_New[:, :K] = np.multiply(Gamma_New[:, :K], sg.T)
+                F_New = np.multiply(F_New, sg)
 
         return Gamma_New, F_New
 
