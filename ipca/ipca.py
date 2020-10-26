@@ -782,6 +782,61 @@ class InstrumentedPCA(BaseEstimator):
 
         return pval
 
+    
+    def BS_Wdelta(self, l, ndraws=1000, n_jobs=1, backend='loky'):
+        """
+        Test of PSF significance for single factors.
+        Bootstrap inference on the hypothesis  l-th column of Gamma_delta = 0.
+        Parameters
+        ----------
+        l   : integer
+            Position of the signle PSF for which the bootstrap is to be
+            carried out. For example, if there are 10 characteristics and
+            one PSF, l should be chosen as l=[l,l+1].
+        ndraws  : integer, default=1000
+            Number of bootstrap draws and re-estimations to be performed
+        n_jobs  : integer
+            Number of workers to be used for multiprocessing.
+            If -1, all available Workers are used.
+        backend : optional
+        Returns
+        -------
+        pval : float
+            P-value from the hypothesis test H0: Gamma_delta=0
+        """
+
+        if self.alpha > 0.:
+            raise ValueError("Bootstrap currently not supported for\
+                              regularized estimation.")
+
+        if self.intercept:
+            raise ValueError('Need to fit model without intercept first.')
+
+        # fail if model isn't estimated
+        if not hasattr(self, "Q"):
+            raise ValueError("Bootstrap can only be run on fitted model.")
+
+        N, L, T = self.metad["N"], self.metad["L"], self.metad["T"]
+
+        # Compute Wdelta_l if PSF in column l is set to zero
+        Wdelta_l = self.Gamma[l, :].dot(self.Gamma[l, :].T)
+        Wdelta_l = np.trace(Wdelta_l)
+        # Compute residuals
+        d = np.full((L, T), np.nan)
+        for t_i, t in enumerate(self.metad["dates"]):
+            d[:, t_i] = self.Q[:, t_i]-self.W[:, :, t_i].dot(self.Gamma)\
+                .dot(self.Factors[:, t_i])
+
+        print("Starting Bootstrap...")
+        Wdelta_l_b = Parallel(n_jobs=n_jobs, backend=backend, verbose=10)(
+            delayed(_BS_Wbeta_sub)(self, n, d, l) for n in range(ndraws))
+        print("Done!")
+
+        pval = np.sum(Wdelta_l_b > Wdelta_l)/ndraws
+        # print(Wbeta_l_b, Wbeta_l)
+
+        return pval
+    
 
     def predictOOS(self, X=None, y=None, indices=None, mean_factor=False):
         """
