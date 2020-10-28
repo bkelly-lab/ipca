@@ -778,30 +778,29 @@ class InstrumentedPCA(BaseEstimator):
         print("Done!")
 
         pval = np.sum(Wbeta_l_b > Wbeta_l)/ndraws
-        # print(Wbeta_l_b, Wbeta_l)
 
         return pval
-    
-    
+
+
     def BS_Wdelta(self, ndraws=1000, n_jobs=1, backend='loky'):
         """
         Test of PSF significance.
-        Bootstrap inference on the hypothesis Gamma_delta = 0
+        Bootstrap inference on the hypothesis Gamma_delta = 0. Assumes that only one PSF is used and no intercept is in use.
         Parameters
         ----------
         ndraws  : integer, default=1000
             Number of bootstrap draws and re-estimations to be performed
-        
+
         n_jobs  : integer
             Number of workers to be used for multiprocessing.
             If -1, all available Workers are used.
-        
+
         backend : optional
-        
+
         Returns
         -------
         pval : float
-            P-value from the hypothesis test H0: Gamma_alpha=0
+            P-value from the hypothesis test H0: Gamma_delta=0
         """
 
         if self.alpha > 0.:
@@ -813,7 +812,13 @@ class InstrumentedPCA(BaseEstimator):
 
         if not self.PSFcase:
             raise ValueError('Need to fit model with one PSF first.')
-        
+
+        K_PSF, _ = np.shape(self.PSF)
+
+        if K_PSF > 1:
+            raise ValueError('Not implemented for more than one PSF yet.')
+
+
         # fail if model isn't estimated
         if not hasattr(self, "Q"):
             raise ValueError("Bootstrap can only be run on fitted model.")
@@ -832,7 +837,7 @@ class InstrumentedPCA(BaseEstimator):
         Wdelta_b = Parallel(n_jobs=n_jobs, backend=backend, verbose=10)(
             delayed(_BS_Wdelta_sub)(self, n, d) for n in range(ndraws))
         print("Done!")
-        
+
         #print(Wdelta_b, Wdelta)
         pval = np.sum(Wdelta_b > Wdelta)/ndraws
 
@@ -1695,8 +1700,8 @@ def _BS_Wdelta_sub(model, n, d):
         L, T = model.metad["L"], model.metad["T"]
         Q_b = np.full((L, T), np.nan)
         np.random.seed(n)
-        
-        #Modify Gamma_beta such that its last row for the PSF is zero
+
+        #Modify Gamma_delta such that its last row for the PSF is zero
         Gamma_delta = np.copy(model.Gamma)
         Gamma_delta[:, -1] = 0
 
@@ -1718,7 +1723,7 @@ def _BS_Wdelta_sub(model, n, d):
                                Observation discarded.")
                 pass
 
-        # Compute and store Walpha_b
+        # Compute and store Wdelta_b
         Wdelta_b = Gamma[:, -1].T.dot(Gamma[:, -1])
         return Wdelta_b
 
