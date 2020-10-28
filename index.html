@@ -232,6 +232,29 @@ If -1, all available Workers are used.</p></li>
 </dd></dl>
 
 <dl class="py method">
+<dt id="ipca.InstrumentedPCA.BS_Wdelta">
+<code class="sig-name descname">BS_Wdelta</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">ndraws</span><span class="o">=</span><span class="default_value">1000</span></em>, <em class="sig-param"><span class="n">n_jobs</span><span class="o">=</span><span class="default_value">1</span></em>, <em class="sig-param"><span class="n">backend</span><span class="o">=</span><span class="default_value">'loky'</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.BS_Wdelta"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.BS_Wdelta" title="Permalink to this definition">¶</a></dt>
+<dd><p>Test of PSF significance.
+Bootstrap inference on the hypothesis Gamma_delta = 0. Assumes that only one PSF is used and no intercept is in use.
+:Parameters: * <strong>ndraws</strong> (<em>integer, default=1000</em>) – Number of bootstrap draws and re-estimations to be performed</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><strong>n_jobs</strong> (<em>integer</em>) – Number of workers to be used for multiprocessing.
+If -1, all available Workers are used.</p></li>
+<li><p><strong>backend</strong> (<em>optional</em>)</p></li>
+</ul>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p><strong>pval</strong> – P-value from the hypothesis test H0: Gamma_delta=0</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt id="ipca.InstrumentedPCA.fit">
 <code class="sig-name descname">fit</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span></em>, <em class="sig-param"><span class="n">y</span></em>, <em class="sig-param"><span class="n">indices</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">PSF</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">Gamma</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">Factors</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">data_type</span><span class="o">=</span><span class="default_value">'portfolio'</span></em>, <em class="sig-param"><span class="n">label_ind</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.fit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.fit" title="Permalink to this definition">¶</a></dt>
 <dd><p>Fits the regressor to the data using an alternating least squares
