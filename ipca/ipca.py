@@ -781,6 +781,62 @@ class InstrumentedPCA(BaseEstimator):
         # print(Wbeta_l_b, Wbeta_l)
 
         return pval
+    
+    
+    def BS_Wdelta(self, ndraws=1000, n_jobs=1, backend='loky'):
+        """
+        Test of PSF significance.
+        Bootstrap inference on the hypothesis Gamma_delta = 0
+        Parameters
+        ----------
+        ndraws  : integer, default=1000
+            Number of bootstrap draws and re-estimations to be performed
+        
+        n_jobs  : integer
+            Number of workers to be used for multiprocessing.
+            If -1, all available Workers are used.
+        
+        backend : optional
+        
+        Returns
+        -------
+        pval : float
+            P-value from the hypothesis test H0: Gamma_alpha=0
+        """
+
+        if self.alpha > 0.:
+            raise ValueError("Bootstrap currently not supported for\
+                              regularized estimation.")
+
+        if self.intercept:
+            raise ValueError('Need to fit model without intercept first.')
+
+        if not self.PSFcase:
+            raise ValueError('Need to fit model with one PSF first.')
+        
+        # fail if model isn't estimated
+        if not hasattr(self, "Q"):
+            raise ValueError("Bootstrap can only be run on fitted model.")
+
+        N, L, T = self.metad["N"], self.metad["L"], self.metad["T"]
+
+        # Compute Wdelta if Gamma_delta is set to zero
+        Wdelta = self.Gamma[:, -1].T.dot(self.Gamma[:, -1])
+        # Compute residuals
+        d = np.full((L, T), np.nan)
+        for t_i, t in enumerate(self.metad["dates"]):
+            d[:, t_i] = self.Q[:, t_i]-self.W[:, :, t_i].dot(self.Gamma)\
+                .dot(self.Factors[:, t_i])
+
+        print("Starting Bootstrap...")
+        Wdelta_b = Parallel(n_jobs=n_jobs, backend=backend, verbose=10)(
+            delayed(_BS_Wdelta_sub)(self, n, d) for n in range(ndraws))
+        print("Done!")
+        
+        #print(Wdelta_b, Wdelta)
+        pval = np.sum(Wdelta_b > Wdelta)/ndraws
+
+        return pval
 
 
     def predictOOS(self, X=None, y=None, indices=None, mean_factor=False):
@@ -1634,6 +1690,37 @@ def _BS_Wbeta_sub(model, n, d, l):
     Wbeta_l_b = Gamma[l, :].dot(Gamma[l, :].T)
     Wbeta_l_b = np.trace(Wbeta_l_b)
     return Wbeta_l_b
+
+def _BS_Wdelta_sub(model, n, d):
+        L, T = model.metad["L"], model.metad["T"]
+        Q_b = np.full((L, T), np.nan)
+        np.random.seed(n)
+        
+        #Modify Gamma_beta such that its last row for the PSF is zero
+        Gamma_delta = np.copy(model.Gamma)
+        Gamma_delta[:, -1] = 0
+
+        Gamma = None
+        while Gamma is None:
+            try:
+                for t in range(T):
+                    d_temp = np.random.standard_t(5)
+                    d_temp *= d[:,np.random.randint(0,high=T)]
+                    Q_b[:, t] = model.W[:, :, t].dot(Gamma_delta)\
+                        .dot(model.Factors[:, t]) + d_temp
+                Gamma, Factors = model._fit_ipca(Q=Q_b, W=model.W,
+                                                 val_obs=model.val_obs,
+                                                 PSF=model.PSF, quiet=True,
+                                                 data_type="portfolio")
+
+            except np.linalg.LinAlgError:
+                warnings.warn("Encountered singularity in bootstrap iteration.\
+                               Observation discarded.")
+                pass
+
+        # Compute and store Walpha_b
+        Wdelta_b = Gamma[:, -1].T.dot(Gamma[:, -1])
+        return Wdelta_b
 
 
 @jit(nopython=True)
