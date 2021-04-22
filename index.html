@@ -3,9 +3,9 @@
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" >
 <head>
-  <meta charset="utf-8">
+  <meta charset="utf-8" />
   
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
   <title>IPCA Package Documentation &mdash; ipca  documentation</title>
   
@@ -16,7 +16,10 @@
 
   
   
+
   
+  
+
   
 
   
@@ -29,7 +32,6 @@
         <script src="_static/jquery.js"></script>
         <script src="_static/underscore.js"></script>
         <script src="_static/doctools.js"></script>
-        <script src="_static/language_data.js"></script>
     
     <script type="text/javascript" src="_static/js/theme.js"></script>
 
@@ -49,7 +51,7 @@
           
 
           
-            <a href="#" class="icon icon-home" alt="Documentation Home"> ipca
+            <a href="#" class="icon icon-home"> ipca
           
 
           
@@ -124,6 +126,8 @@
 
 
 
+
+
 <div role="navigation" aria-label="breadcrumbs navigation">
 
   <ul class="wy-breadcrumbs">
@@ -135,7 +139,7 @@
     
       <li class="wy-breadcrumbs-aside">
         
-            
+          
             <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
           
         
@@ -158,7 +162,7 @@ Principal Components Analysis framework by Kelly, Pruitt, Su (2017)
 </div>
 <span class="target" id="module-ipca"></span><dl class="py class">
 <dt id="ipca.InstrumentedPCA">
-<em class="property">class </em><code class="sig-prename descclassname">ipca.</code><code class="sig-name descname">InstrumentedPCA</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">n_factors</span><span class="o">=</span><span class="default_value">1</span></em>, <em class="sig-param"><span class="n">intercept</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">max_iter</span><span class="o">=</span><span class="default_value">10000</span></em>, <em class="sig-param"><span class="n">iter_tol</span><span class="o">=</span><span class="default_value">1e-05</span></em>, <em class="sig-param"><span class="n">alpha</span><span class="o">=</span><span class="default_value">0.0</span></em>, <em class="sig-param"><span class="n">l1_ratio</span><span class="o">=</span><span class="default_value">1.0</span></em>, <em class="sig-param"><span class="n">n_jobs</span><span class="o">=</span><span class="default_value">1</span></em>, <em class="sig-param"><span class="n">backend</span><span class="o">=</span><span class="default_value">'loky'</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">ipca.</span></code><code class="sig-name descname"><span class="pre">InstrumentedPCA</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_factors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">intercept</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_iter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">iter_tol</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">l1_ratio</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_jobs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'loky'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#ipca.InstrumentedPCA" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">sklearn.base.BaseEstimator</span></code></p>
 <p>This class implements the IPCA algorithm by Kelly, Pruitt, Su (2017).</p>
 <dl class="field-list simple">
@@ -185,7 +189,7 @@ parallelization is done</p></li>
 </dl>
 <dl class="py method">
 <dt id="ipca.InstrumentedPCA.BS_Walpha">
-<code class="sig-name descname">BS_Walpha</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">ndraws</span><span class="o">=</span><span class="default_value">1000</span></em>, <em class="sig-param"><span class="n">n_jobs</span><span class="o">=</span><span class="default_value">1</span></em>, <em class="sig-param"><span class="n">backend</span><span class="o">=</span><span class="default_value">'loky'</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.BS_Walpha"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.BS_Walpha" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">BS_Walpha</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ndraws</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_jobs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'loky'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.BS_Walpha"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#ipca.InstrumentedPCA.BS_Walpha" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bootstrap inference on the hypothesis Gamma_alpha = 0</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -207,7 +211,7 @@ used.</p></li>
 
 <dl class="py method">
 <dt id="ipca.InstrumentedPCA.BS_Wbeta">
-<code class="sig-name descname">BS_Wbeta</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">l</span></em>, <em class="sig-param"><span class="n">ndraws</span><span class="o">=</span><span class="default_value">1000</span></em>, <em class="sig-param"><span class="n">n_jobs</span><span class="o">=</span><span class="default_value">1</span></em>, <em class="sig-param"><span class="n">backend</span><span class="o">=</span><span class="default_value">'loky'</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.BS_Wbeta"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.BS_Wbeta" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">BS_Wbeta</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">l</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ndraws</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_jobs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'loky'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.BS_Wbeta"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#ipca.InstrumentedPCA.BS_Wbeta" title="Permalink to this definition">¶</a></dt>
 <dd><p>Test of instrument significance.
 Bootstrap inference on the hypothesis  l-th column of Gamma_beta = 0.</p>
 <dl class="field-list simple">
@@ -233,7 +237,7 @@ If -1, all available Workers are used.</p></li>
 
 <dl class="py method">
 <dt id="ipca.InstrumentedPCA.BS_Wdelta">
-<code class="sig-name descname">BS_Wdelta</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">ndraws</span><span class="o">=</span><span class="default_value">1000</span></em>, <em class="sig-param"><span class="n">n_jobs</span><span class="o">=</span><span class="default_value">1</span></em>, <em class="sig-param"><span class="n">backend</span><span class="o">=</span><span class="default_value">'loky'</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.BS_Wdelta"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.BS_Wdelta" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">BS_Wdelta</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ndraws</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_jobs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'loky'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.BS_Wdelta"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#ipca.InstrumentedPCA.BS_Wdelta" title="Permalink to this definition">¶</a></dt>
 <dd><p>Test of PSF significance.
 Bootstrap inference on the hypothesis Gamma_delta = 0. Assumes that only one PSF is used and no intercept is in use.
 :Parameters: * <strong>ndraws</strong> (<em>integer, default=1000</em>) – Number of bootstrap draws and re-estimations to be performed</p>
@@ -256,7 +260,7 @@ If -1, all available Workers are used.</p></li>
 
 <dl class="py method">
 <dt id="ipca.InstrumentedPCA.fit">
-<code class="sig-name descname">fit</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span></em>, <em class="sig-param"><span class="n">y</span></em>, <em class="sig-param"><span class="n">indices</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">PSF</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">Gamma</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">Factors</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">data_type</span><span class="o">=</span><span class="default_value">'portfolio'</span></em>, <em class="sig-param"><span class="n">label_ind</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.fit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.fit" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">fit</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">indices</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">PSF</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Gamma</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Factors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'portfolio'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_ind</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#ipca.InstrumentedPCA.fit" title="Permalink to this definition">¶</a></dt>
 <dd><p>Fits the regressor to the data using an alternating least squares
 scheme.</p>
 <dl class="field-list">
@@ -334,7 +338,7 @@ top of the pre-specified ones.</p>
 
 <dl class="py method">
 <dt id="ipca.InstrumentedPCA.fit_path">
-<code class="sig-name descname">fit_path</code><span class="sig-paren">(</span><em class="sig-param">X</em>, <em class="sig-param">y</em>, <em class="sig-param">indices=None</em>, <em class="sig-param">PSF=None</em>, <em class="sig-param">alpha_l=None</em>, <em class="sig-param">n_splits=10</em>, <em class="sig-param">split_method=&lt;class 'sklearn.model_selection._split.GroupKFold'&gt;</em>, <em class="sig-param">n_jobs=1</em>, <em class="sig-param">backend='loky'</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.fit_path"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.fit_path" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">fit_path</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="pre">X</span></em>, <em class="sig-param"><span class="pre">y</span></em>, <em class="sig-param"><span class="pre">indices=None</span></em>, <em class="sig-param"><span class="pre">PSF=None</span></em>, <em class="sig-param"><span class="pre">alpha_l=None</span></em>, <em class="sig-param"><span class="pre">n_splits=10</span></em>, <em class="sig-param"><span class="pre">split_method=&lt;class</span> <span class="pre">'sklearn.model_selection._split.GroupKFold'&gt;</span></em>, <em class="sig-param"><span class="pre">n_jobs=1</span></em>, <em class="sig-param"><span class="pre">backend='loky'</span></em>, <em class="sig-param"><span class="pre">**kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.fit_path"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#ipca.InstrumentedPCA.fit_path" title="Permalink to this definition">¶</a></dt>
 <dd><p>Fit a path of elastic net fits for various regularizing constants</p>
 <dl class="field-list">
 <dt class="field-odd">Parameters</dt>
@@ -379,7 +383,7 @@ constants and C is the number of CV partitions</p>
 
 <dl class="py method">
 <dt id="ipca.InstrumentedPCA.get_factors">
-<code class="sig-name descname">get_factors</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">label_ind</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.get_factors"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.get_factors" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">get_factors</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">label_ind</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.get_factors"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#ipca.InstrumentedPCA.get_factors" title="Permalink to this definition">¶</a></dt>
 <dd><p>returns a tuple containing Gamma and Factors</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -397,7 +401,7 @@ index info applied</p>
 
 <dl class="py method">
 <dt id="ipca.InstrumentedPCA.predict">
-<code class="sig-name descname">predict</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">indices</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">W</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">mean_factor</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">data_type</span><span class="o">=</span><span class="default_value">'panel'</span></em>, <em class="sig-param"><span class="n">label_ind</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.predict" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">predict</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">indices</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">W</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mean_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'panel'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_ind</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.predict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#ipca.InstrumentedPCA.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>wrapper around different data type predict methods</p>
 <dl class="field-list">
 <dt class="field-odd">Parameters</dt>
@@ -472,7 +476,7 @@ numpy arrays.</p>
 
 <dl class="py method">
 <dt id="ipca.InstrumentedPCA.predictOOS">
-<code class="sig-name descname">predictOOS</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">y</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">indices</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">mean_factor</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.predictOOS"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.predictOOS" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">predictOOS</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">indices</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mean_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.predictOOS"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#ipca.InstrumentedPCA.predictOOS" title="Permalink to this definition">¶</a></dt>
 <dd><p>Predicts time t+1 observation using an out-of-sample design.</p>
 <dl class="field-list">
 <dt class="field-odd">Parameters</dt>
@@ -520,7 +524,7 @@ characteristics information.</p>
 
 <dl class="py method">
 <dt id="ipca.InstrumentedPCA.predict_panel">
-<code class="sig-name descname">predict_panel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span></em>, <em class="sig-param"><span class="n">indices</span></em>, <em class="sig-param"><span class="n">T</span></em>, <em class="sig-param"><span class="n">mean_factor</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.predict_panel"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.predict_panel" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">predict_panel</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">indices</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mean_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.predict_panel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#ipca.InstrumentedPCA.predict_panel" title="Permalink to this definition">¶</a></dt>
 <dd><p>Predicts fitted values for a previously fitted regressor + panel data</p>
 <dl class="field-list">
 <dt class="field-odd">Parameters</dt>
@@ -555,7 +559,7 @@ A nan will be returned if there is missing chars information.</p>
 
 <dl class="py method">
 <dt id="ipca.InstrumentedPCA.predict_portfolio">
-<code class="sig-name descname">predict_portfolio</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">W</span></em>, <em class="sig-param"><span class="n">L</span></em>, <em class="sig-param"><span class="n">T</span></em>, <em class="sig-param"><span class="n">mean_factor</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.predict_portfolio"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.predict_portfolio" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">predict_portfolio</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">W</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">L</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mean_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.predict_portfolio"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#ipca.InstrumentedPCA.predict_portfolio" title="Permalink to this definition">¶</a></dt>
 <dd><p>Predicts fitted values for a previously fitted regressor + portfolios</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -578,7 +582,7 @@ before prediction.</p></li>
 
 <dl class="py method">
 <dt id="ipca.InstrumentedPCA.score">
-<code class="sig-name descname">score</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span></em>, <em class="sig-param"><span class="n">y</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">indices</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">mean_factor</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">data_type</span><span class="o">=</span><span class="default_value">'panel'</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.score"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ipca.InstrumentedPCA.score" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">score</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">indices</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mean_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'panel'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/ipca/ipca.html#InstrumentedPCA.score"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#ipca.InstrumentedPCA.score" title="Permalink to this definition">¶</a></dt>
 <dd><p>generate R^2</p>
 <dl class="field-list">
 <dt class="field-odd">Parameters</dt>
@@ -651,28 +655,25 @@ pandas Series</p></li>
            
           </div>
           <footer>
-  
 
   <hr/>
 
   <div role="contentinfo">
     <p>
-        
-        &copy; Copyright 2019, Matthias Buechner
+        &#169; Copyright 2019, Matthias Buechner.
 
     </p>
   </div>
     
     
     
-    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
     
-    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
     
     provided by <a href="https://readthedocs.org">Read the Docs</a>. 
 
 </footer>
-
         </div>
       </div>
 
