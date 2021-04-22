@@ -1,6 +1,5 @@
 import pytest
 import numpy as np
-from sklearn.utils.testing import assert_raises
 from statsmodels.datasets import grunfeld
 import time
 from datetime import datetime
@@ -9,11 +8,13 @@ from ipca import InstrumentedPCA
 
 
 # Test Construction Errors
-@pytest.mark.fast_test
 def test_construction_errors():
-    assert_raises(ValueError, InstrumentedPCA, n_factors=0)
-    assert_raises(NotImplementedError, InstrumentedPCA, intercept='jabberwocky')
-    assert_raises(ValueError, InstrumentedPCA, iter_tol=2)
+  with pytest.raises(ValueError):
+    InstrumentedPCA(n_factors=0)
+  with pytest.raises(NotImplementedError):
+    InstrumentedPCA(intercept='jabberwocky')
+  with pytest.raises(ValueError):
+    InstrumentedPCA(iter_tol=2)
 
 
 # Create test data and run package

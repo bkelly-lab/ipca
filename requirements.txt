@@ -1,8 +1,8 @@
-numpy>=1.15
-pandas>= 0.24
-scipy>=1.1
-statsmodels>=0.9
+numpy>=1.19
+pandas>= 1.2.3
+scipy>=1.6
+statsmodels>=0.11
 progressbar >=2.5
-scikit-learn >= 0.20
-numba >= 0.42.0
-joblib >= 0.13.2
+scikit-learn >= 0.24
+numba >= 0.53.0
+joblib >= 1.0.1
