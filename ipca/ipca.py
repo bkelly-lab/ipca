@@ -765,7 +765,7 @@ class InstrumentedPCA(BaseEstimator):
 
         # Compute Wbeta_l if l-th characteristics is set to zero
         Wbeta_l = self.Gamma[l, :].dot(self.Gamma[l, :].T)
-        Wbeta_l = np.trace(Wbeta_l)
+
         # Compute residuals
         d = np.full((L, T), np.nan)
         for t_i, t in enumerate(self.metad["dates"]):
