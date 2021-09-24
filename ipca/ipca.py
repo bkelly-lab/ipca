@@ -448,6 +448,8 @@ class InstrumentedPCA(BaseEstimator):
             elif X is not None:
                 X, y, indices, metad = _prep_input(X, None, indices)
                 Q, W, val_obs = _build_portfolio(X, None, indices, metad)
+                L = W.shape[0]
+                T = W.shape[2]
             elif hasattr(self, "W"):
                 W = self.W
                 L = W.shape[0]
