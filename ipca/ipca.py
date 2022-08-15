@@ -1429,7 +1429,10 @@ def _build_portfolio(X, y, indices, metad):
         for t in range(T):
             ixt = (indices[:, 1] == t)
             val_obs[t] = np.sum(ixt)
-            Q[:, t] = X[ixt, :].T.dot(y[ixt])/val_obs[t]
+            if t==0:
+                Q[:, t] = (X[ixt, :].T.dot(y[ixt]) / val_obs[t]).reshape(-1, )
+            else:
+                Q[:, t] = X[ixt, :].T.dot(y[ixt])/val_obs[t]
             W[:, :, t] = X[ixt, :].T.dot(X[ixt, :])/val_obs[t]
             bar.update(t)
 
